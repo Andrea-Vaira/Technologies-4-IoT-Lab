@@ -1,158 +1,177 @@
-
 #include <Wire.h>
 #include <LiquidCrystal_PCF8574.h>
+#include <PDM.h>
 
+// Pins
 const int MOTOR_PIN = 5;
 const int LED_PIN = 2;
 const int MOV_PIN = 7;
+const int TEMP_PIN = A0;
 
-const int NUM_STEPS = 10;
-const int NUM_STEPS_LED = 5;
+// LCD Setup
+LiquidCrystal_PCF8574 lcd(0x27); 
 
-const int STEP_SIZE = 255 / NUM_STEPS; // approx 25.5 per step
-const int STEP_SIZE_LED = 255 / NUM_STEPS_LED; // approx 25.5 per step
+// --- Constants & Thresholds ---
+const int B = 4275; 
+const long R0 = 100000;
+const float T0 = 298.15;
 
-int currentStep = 0; // Starts at 0 (Off)
-int currentStepLED = 0;
+const unsigned long TIMEOUT_PIR = 1800000;    // 30 min
+const unsigned long TIMEOUT_SOUND = 3600000;  // 60 min
+const unsigned long SOUND_WINDOW = 600000;   // 10 min window for events
+const int N_SOUND_EVENTS = 10;
+const int SOUND_THRESHOLD = 350;
 
-// Sensor Constants
-const int B = 4275;               
-const long R0 = 100000;           
-const float T0 = 298.15;          
-const int sensorPin = A0;  
+// --- Set-points (Requirement f) ---
+// Structure: {AC_Min, AC_Max, Heat_Max, Heat_Min}
+float sp_occ[4] = {25.0, 30.0, 20.0, 15.0};   // Occupied
+float sp_unocc[4] = {28.0, 35.0, 15.0, 10.0}; // Unoccupied (Eco mode)
 
-volatile int eventCounter = 0;
-volatile int lasteventCounter = 0;
-volatile bool sensorState = LOW;
+// --- State Variables ---
+float temperatureC = 0.0;
+int fanPct = 0;
+int heatPct = 0;
+volatile unsigned long lastPirMovement = 0;
+unsigned long soundEvents[N_SOUND_EVENTS];
+int soundIdx = 0;
+unsigned long lastSoundTime = 0;
+bool presence = false;
 
-const int timeout_pir = 20000;
-unsigned long lastReportTimePeople = 0;
-unsigned long lastReportTime = 0;
-const unsigned long reportInterval = 8000; // 30 seconds in milliseconds
-
+short sampleBuffer[256];
+volatile int samplesRead = 0;
+unsigned long lastLCDToggle = 0;
+int lcdScreen = 0;
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(9600);
-  Serial.println("roba");
-  attachInterrupt(digitalPinToInterrupt(MOV_PIN), sensorISR, CHANGE);
+  pinMode(MOTOR_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(MOV_PIN, INPUT);
   
+  lcd.begin(16, 2);
+  lcd.setBacklight(255);
+
+  attachInterrupt(digitalPinToInterrupt(MOV_PIN), sensorISR, RISING);
+  PDM.onReceive(onPDMdata);
+  if (!PDM.begin(1, 16000)) { while (1); }
 }
-
-
 
 void loop() {
-  unsigned long currentTime = millis();
-  if (currentTime - lastReportTime >= reportInterval) {
-    if (currentTime - lastReportTimePeople >= timeout_pir){
-      if (lasteventCounter == eventCounter){
-        eventCounter = 0;
+  unsigned long now = millis();
+
+  // 1. Audio Processing
+  if (samplesRead > 0) {
+    for (int i = 0; i < samplesRead; i++) {
+      if (abs(sampleBuffer[i]) > SOUND_THRESHOLD) {
+        registerSoundEvent(now);
+        break; 
       }
-      lasteventCounter = eventCounter;
-      lastReportTimePeople = currentTime;
     }
-    // 1. Read and Calculate 
-    int val = analogRead(sensorPin);
-    float R = (1023.0 / (float)val - 1.0) * R0;
-    float temperatureK = 1.0 / (log(R / R0) / B + (1.0 / T0));
-    float temperatureC = temperatureK - 273.15;
+    samplesRead = 0;
+  }
 
-    Serial.print("Fa caldo: ");
-    Serial.println(temperatureC);
-    Serial.print("Gente: ");
-    Serial.println(eventCounter);
+  // 2. Presence Logic (Requirement e)
+  bool pirActive = (now - lastPirMovement < TIMEOUT_PIR);
+  bool soundActive = checkSoundPresence(now);
+  presence = pirActive || soundActive;
 
-    if (temperatureC >= 25){
-      currentStep = 35-temperatureC;
-      if (currentStep > 10) currentStep = 10;
-    }else{
-      currentStep = 0;
+  // 3. Update Temperature & Controls
+  updateTemperature();
+  handleClimate(presence);
+
+  // 4. Serial Command Parsing (Requirement h)
+  // Format: "S[index][value]" e.g., "S0 26.5" updates Occupied AC Min
+  if (Serial.available() > 0) {
+    char cmd = Serial.read();
+    if (cmd == 'S') {
+      int index = Serial.parseInt();
+      float val = Serial.parseFloat();
+      if (index >= 0 && index < 4) sp_occ[index] = val;
+      Serial.println("Set-point Updated");
     }
-    //updateMotor();
+  }
 
-    if (temperatureC >= 15){
-      currentStepLED = 20-temperatureC;
-      if (currentStepLED < 0) currentStepLED = 0;
-    }else{
-      currentStepLED = 0;
-    }
-    updateLED();
-    
+  // 5. LCD Management (Requirement g) - Toggle every 5s
+  if (now - lastLCDToggle > 5000) {
+    lcdScreen = (lcdScreen + 1) % 2;
+    updateLCD();
+    lastLCDToggle = now;
+  }
+}
 
-    writeLCD();
-    lastReportTime = currentTime;
+void handleClimate(bool isPresent) {
+  float* currentSP = isPresent ? sp_occ : sp_unocc;
+  
+  // AC Logic (Linear between sp[0] and sp[1])
+  if (temperatureC >= currentSP[0]) {
+    float raw = (temperatureC - currentSP[0]) / (currentSP[1] - currentSP[0]);
+    fanPct = constrain(raw * 100, 0, 100);
+  } else {
+    fanPct = 0;
+  }
+  
+  // Heater Logic (Linear between sp[2] and sp[3])
+  if (temperatureC <= currentSP[2]) {
+    float raw = (currentSP[2] - temperatureC) / (currentSP[2] - currentSP[3]);
+    heatPct = constrain(raw * 100, 0, 100);
+  } else {
+    heatPct = 0;
+  }
+
+  analogWrite(MOTOR_PIN, map(fanPct, 0, 100, 0, 255));
+  analogWrite(LED_PIN, map(heatPct, 0, 100, 0, 255));
+}
+
+void updateLCD() {
+  lcd.clear();
+  if (lcdScreen == 0) {
+    lcd.setCursor(0,0);
+    lcd.print("T:"); lcd.print(temperatureC, 1);
+    lcd.print("gente?");
+    lcd.print(presence ? "  [Si]" : "  [No]");
+    lcd.setCursor(0,1);
+    lcd.print("AC:"); lcd.print(fanPct); 
+    lcd.print("% HT:"); lcd.print(heatPct); lcd.print("%");
+  } else {
+    float* s = presence ? sp_occ : sp_unocc;
+    lcd.setCursor(0,0);
+    lcd.print("AC:"); lcd.print(s[0],0); lcd.print("-"); lcd.print(s[1],0);
+    lcd.setCursor(0,1);
+    lcd.print("HT:"); lcd.print(s[2],0); lcd.print("-"); lcd.print(s[3],0);
   }
 
 }
 
-void updateLED(){
-  int brightness = currentStepLED * STEP_SIZE_LED;
-  if (currentStepLED == NUM_STEPS_LED) brightness = 255;
+// --- Helpers ---
+void sensorISR() { lastPirMovement = millis(); }
 
-  analogWrite(LED_PIN, brightness);
-  Serial.print("brightness Step: ");
-  Serial.print(currentStepLED);
-  Serial.print("/");
-  Serial.print(NUM_STEPS_LED);
-  Serial.print(" (brightness Value: ");
-  Serial.print(brightness);
-  Serial.println(")");
+void onPDMdata() {
+  int bytesAvailable = PDM.available();
+  PDM.read(sampleBuffer, bytesAvailable);
+  samplesRead = bytesAvailable / 2;
 }
 
-
-void updateMotor() {
-  // Calculate PWM value (0-255)
-  int pwmValue = currentStep * STEP_SIZE;
-  
-  // Ensure the 10th step hits exactly 255 (100% duty cycle)
-  if (currentStep == NUM_STEPS) pwmValue = 255;
-
-  analogWrite(MOTOR_PIN, pwmValue);
-  
-  // Feedback to user
-  Serial.print("Speed Step: ");
-  Serial.print(currentStep);
-  Serial.print("/");
-  Serial.print(NUM_STEPS);
-  Serial.print(" (PWM Value: ");
-  Serial.print(pwmValue);
-  Serial.println(")");
+void registerSoundEvent(unsigned long now) {
+  soundEvents[soundIdx] = now;
+  soundIdx = (soundIdx + 1) % N_SOUND_EVENTS;
+  lastSoundTime = now;
 }
 
-void sensorISR() {
-  
-  int sensorValue = digitalRead(MOV_PIN);
-  if (sensorValue == HIGH) {
-    eventCounter++;
+bool checkSoundPresence(unsigned long now) {
+  // Check if we have 10 events within the 10-minute window
+  int count = 0;
+  for(int i=0; i<N_SOUND_EVENTS; i++) {
+    if (now - soundEvents[i] < SOUND_WINDOW) count++;
   }
   
+  static bool soundState = false;
+  if (count >= N_SOUND_EVENTS) soundState = true;
+  if (now - lastSoundTime > TIMEOUT_SOUND) soundState = false;
+  return soundState;
 }
 
-void writeLCD(){
-  lcd.setCursor(0,0);
-  lcd.clear();
-  lcd.setCursor(1,0);
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("T:");
-  lcd.print(temperatureC);
-  lcd.print("F:");
-  lcd.print(100/currentStep);
-  lcd.setCursor(1,0);
-  lcd.print("P:");
-  lcd.print(eventCounter);
-  delay(5*1000);
-  lcd.setCursor(0,0);
-  lcd.clear();
-  lcd.setCursor(1,0);
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("A:");
-  lcd.print(temperatureC);
-  lcd.print("R:");
-  lcd.print(100/currentStep);
-  lcd.setCursor(1,0);
-  lcd.print("F:");
-  lcd.print(eventCounter);
-  delay(5*1000);
+void updateTemperature() {
+  int val = analogRead(TEMP_PIN);
+  float R = (1023.0 / (float)val - 1.0) * R0;
+  temperatureC = 1.0 / (log(R / R0) / B + (1.0 / T0)) - 273.15;
 }
