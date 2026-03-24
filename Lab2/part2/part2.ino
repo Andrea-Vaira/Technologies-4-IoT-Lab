@@ -18,9 +18,9 @@ const float T0 = 298.15;
 
 const unsigned long TIMEOUT_PIR = 1800000;    // 30 min
 const unsigned long TIMEOUT_SOUND = 3600000;  // 60 min
-const unsigned long SOUND_WINDOW = 600000;   // 10 min window for events
+const unsigned long SOUND_WINDOW = 6000;   // 10 min window for events
 const int N_SOUND_EVENTS = 10;
-const int SOUND_THRESHOLD = 350;
+const int SOUND_THRESHOLD = 3000;
 
 // --- Set-points (Requirement f) ---
 // Structure: {AC_Min, AC_Max, Heat_Max, Heat_Min}
@@ -46,6 +46,7 @@ void setup() {
   Serial.begin(9600);
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
+  while(!Serial);
   pinMode(MOV_PIN, INPUT);
   
   lcd.begin(16, 2);
@@ -53,7 +54,10 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(MOV_PIN), sensorISR, RISING);
   PDM.onReceive(onPDMdata);
-  if (!PDM.begin(1, 16000)) { while (1); }
+  if (!PDM.begin(1, 20000)) { while (1); }
+  for (int i = 0; i < N_SOUND_EVENTS;i++){
+    soundEvents[i] = 0;
+  }
 }
 
 void loop() {
@@ -64,11 +68,12 @@ void loop() {
     for (int i = 0; i < samplesRead; i++) {
       if (abs(sampleBuffer[i]) > SOUND_THRESHOLD) {
         registerSoundEvent(now);
+        Serial.println(sampleBuffer[i]);
         break; 
       }
     }
-    samplesRead = 0;
   }
+  samplesRead = 0;
 
   // 2. Presence Logic (Requirement e)
   bool pirActive = (now - lastPirMovement < TIMEOUT_PIR);
@@ -118,28 +123,29 @@ void handleClimate(bool isPresent) {
     heatPct = 0;
   }
 
-  analogWrite(MOTOR_PIN, map(fanPct, 0, 100, 0, 255));
+  //analogWrite(MOTOR_PIN, map(fanPct, 0, 100, 0, 255));
   analogWrite(LED_PIN, map(heatPct, 0, 100, 0, 255));
 }
 
 void updateLCD() {
   lcd.clear();
-  if (lcdScreen == 0) {
+  if (lcdScreen == 0){
     lcd.setCursor(0,0);
     lcd.print("T:"); lcd.print(temperatureC, 1);
     lcd.print("gente?");
-    lcd.print(presence ? "  [Si]" : "  [No]");
+    lcd.print(presence ? "[Si]" : "[No]");
     lcd.setCursor(0,1);
     lcd.print("AC:"); lcd.print(fanPct); 
     lcd.print("% HT:"); lcd.print(heatPct); lcd.print("%");
-  } else {
+  }else{
     float* s = presence ? sp_occ : sp_unocc;
     lcd.setCursor(0,0);
     lcd.print("AC:"); lcd.print(s[0],0); lcd.print("-"); lcd.print(s[1],0);
     lcd.setCursor(0,1);
     lcd.print("HT:"); lcd.print(s[2],0); lcd.print("-"); lcd.print(s[3],0);
   }
-
+  
+  
 }
 
 // --- Helpers ---
@@ -163,7 +169,8 @@ bool checkSoundPresence(unsigned long now) {
   for(int i=0; i<N_SOUND_EVENTS; i++) {
     if (now - soundEvents[i] < SOUND_WINDOW) count++;
   }
-  
+  Serial.print("Gente: ");
+  Serial.println(count);
   static bool soundState = false;
   if (count >= N_SOUND_EVENTS) soundState = true;
   if (now - lastSoundTime > TIMEOUT_SOUND) soundState = false;
