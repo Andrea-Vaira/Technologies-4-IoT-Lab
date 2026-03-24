@@ -16,8 +16,8 @@ const int B = 4275;
 const long R0 = 100000;
 const float T0 = 298.15;
 
-const unsigned long TIMEOUT_PIR = 1800000;    // 30 min
-const unsigned long TIMEOUT_SOUND = 3600000;  // 60 min
+const unsigned long TIMEOUT_PIR = 5000;    // 30 min
+const unsigned long TIMEOUT_SOUND = 6000;  // 60 min
 const unsigned long SOUND_WINDOW = 6000;   // 10 min window for events
 const int N_SOUND_EVENTS = 10;
 const int SOUND_THRESHOLD = 3000;
@@ -42,6 +42,8 @@ volatile int samplesRead = 0;
 unsigned long lastLCDToggle = 0;
 int lcdScreen = 0;
 
+unsigned long lastClap = 0;
+
 void setup() {
   Serial.begin(9600);
   pinMode(MOTOR_PIN, OUTPUT);
@@ -62,16 +64,17 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
-
   // 1. Audio Processing
   if (samplesRead > 0) {
     for (int i = 0; i < samplesRead; i++) {
-      if (abs(sampleBuffer[i]) > SOUND_THRESHOLD) {
+      if (abs(sampleBuffer[i]) > SOUND_THRESHOLD && now - lastClap > 1000) {
         registerSoundEvent(now);
         Serial.println(sampleBuffer[i]);
+        lastClap = now;
         break; 
       }
     }
+    
   }
   samplesRead = 0;
 
@@ -132,7 +135,7 @@ void updateLCD() {
   if (lcdScreen == 0){
     lcd.setCursor(0,0);
     lcd.print("T:"); lcd.print(temperatureC, 1);
-    lcd.print("gente?");
+    lcd.print(" tipi?");
     lcd.print(presence ? "[Si]" : "[No]");
     lcd.setCursor(0,1);
     lcd.print("AC:"); lcd.print(fanPct); 
