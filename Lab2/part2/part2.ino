@@ -60,6 +60,8 @@ void setup() {
   for (int i = 0; i < N_SOUND_EVENTS;i++){
     soundEvents[i] = 0;
   }
+
+  Serial.print("Commands to modify set-points:\n O for Ocuupied set \n U for Unoccupied set \n then chosse the index associeted with the specific mode and the value chosen\n 0-> AC min\n -> AC max\n 2 -> Heat min\n 3 -> Heat max\n")
 }
 
 void loop() {
@@ -91,10 +93,16 @@ void loop() {
   // Format: "S[index][value]" e.g., "S0 26.5" updates Occupied AC Min
   if (Serial.available() > 0) {
     char cmd = Serial.read();
-    if (cmd == 'S') {
+    if (cmd == 'O') {
       int index = Serial.parseInt();
       float val = Serial.parseFloat();
       if (index >= 0 && index < 4) sp_occ[index] = val;
+      Serial.println("Set-point Updated");
+    }
+    if (cmd == 'U') {
+      int index = Serial.parseInt();
+      float val = Serial.parseFloat();
+      if (index >= 0 && index < 4) sp_unocc[index] = val;
       Serial.println("Set-point Updated");
     }
   }
