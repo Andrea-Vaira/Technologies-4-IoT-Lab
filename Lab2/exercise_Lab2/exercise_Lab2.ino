@@ -4,7 +4,7 @@
 #include <MBED_RPi_Pico_TimerInterrupt.h>
 #include <PDM.h>
 
-int RLED= 2; //Per ricordarsi i pin utilizzati
+int RLED= 2; //Pin utilizzati
 int YLED= 3;
 int PIRPIN= 7;
 int FANPIN= 5; 
@@ -30,28 +30,36 @@ const int n_sound_events=10;
 const int sound_interval= 1000*60*1;//1 minuti
 const int sound_threshold=1500;
 const int timeout_sound=1000*60*1; //1 minuti
-volatile int timeSoundEvents[10];
-volatile int lastTimeReadMic=0;
-volatile int firstTimeReadMic=0;
+volatile int timeSoundEvents[n_sound_events]; //Buffer circolare per i tempi legati agli eventi ascoltati dal microfono
+volatile int firstPos=0; //Indici per il buffer circolare
+volatile int lastPos=-1; //inizia da -1 così che alla prima lettura viene messo a 0
 short sampleBuffer[512];
 volatile int numSounds=0;
 
 void setup() {
+  //Setup della porta seriale
   Serial.begin(9600);
   while(!Serial);
   Serial.println("Exercise Lab 2: Local Smart Home");
+  Serial.println("Per settare i valori di soglia scriverli nell'ordine:  minAC maxAC minHeat maxHeat (di fila e separati da uno spazio)");
+  //Setup dello schermo LCD
   lcd.begin(16, 2);
   lcd.setBacklight(255);
   lcd.home();
   lcd.clear();
+
+  //Setup dei pin del led, del sensore di temperatura, della ventola e del sensore pir
   pinMode(RLED, OUTPUT);
   pinMode(TEMPPIN, INPUT);
   pinMode(FANPIN, OUTPUT);
   digitalWrite(FANPIN, potSpeed);
-  setPointsWithOutPeople();
-  Scheduler.startLoop(printOnLcd);
+  setPoints(0, 1); //Settato le soglie nel caso senza persone
   attachInterrupt(digitalPinToInterrupt(PIRPIN), checkPresence, CHANGE);
 
+  //Setup del loop parallelo per stampare sullo schermo LCD
+  Scheduler.startLoop(printOnLcd);
+
+  //Setup del microfono della scheda
   PDM.onReceive(onPDMdata);
   if (!PDM.begin(1, 20000)) {
     Serial.println("Failed to start PDM!");
@@ -60,63 +68,82 @@ void setup() {
 }
 
 void loop() {
+  //Lettura dal sensore di temperatura e calcolo della temp in gradi celsius
   int V= analogRead(TEMPPIN);
   float R= (1023.0/(float)V -1.0)*R0; 
-  T= 1.0/(log(R/R0)/B + (1.0/T0)) - 273.1;
-  if(T >= minCond)
+  T= (1.0/(log(R/R0)/B + (1.0/T0)))- 273.1;
+
+  if(T >= minCond) //Caso in cui la T è tale da accendere la ventola
   {
-    potSpeed= map(T, minCond, maxCond, 0, 255);
+    potSpeed= map(T, minCond, maxCond, 0, 255); //Più T è alto e più gira veloce
     analogWrite(FANPIN, potSpeed);
   }
-  else if(T >= minHeat && T <=maxHeat)
+  else if(T >= minHeat && T <=maxHeat) //caso in cui è tale da accendere la luce (per scaldare)
   {
-    brightness= map(T, minHeat, maxHeat, 255, 0);
+    brightness= map(T, minHeat, maxHeat, 255, 0);//Più T è basso e più il led è luminoso
     analogWrite(RLED, brightness);
   }
 
   long int now=millis();
-  if((now-lastTimeReadPir)> timeout_pir)
+  if((now-lastTimeReadPir)> timeout_pir)//è passato molto tempo dall'ultimo movimento visto (persona presente)
   {
     numPeoplePir=0;
   }
 
-  if((now-lastTimeReadMic) >timeout_sound)
+  if((now-timeSoundEvents[lastPos]) >timeout_sound)
   {
     numPeopleMic=0;
-    numSounds=0;
-    firstTimeReadMic=0;
-    lastTimeReadMic=0;
   }
 
-  if((numPeopleMic+ numPeoplePir) == 0)
+  if((numPeopleMic+ numPeoplePir) == 0) //Non ci sono persone neanche dietro al PIR
   {
-    setPointsWithOutPeople();
+    setPoints(0, 1);
+  }
+
+  if(Serial.available() > 0)
+  {
+    setPointsFromSerial();
   }
 
 }
 
-void setPointsWithPeople()
+//Setup delle temperature di soglia (0, 1) senza persone e (2, 3) con persone
+void setPoints(int min, int max)
 {
-  minCond=valCond[2];
-  maxCond=valCond[3];
-  minHeat=valHeat[2];
-  maxHeat=valHeat[3];
+  minCond=valCond[min];
+  maxCond=valCond[max];
+  minHeat=valHeat[min];
+  maxHeat=valHeat[max];
 }
 
-void setPointsWithOutPeople()
+void setPointsFromSerial()
 {
-  minCond=valCond[0];
-  maxCond=valCond[1];
-  minHeat=valHeat[0];
-  maxHeat=valHeat[1];
+  //Legge i valori dalla porta seriale tutti di fila
+  float mAC= Serial.parseFloat();
+  float MAC= Serial.parseFloat();
+  float mHeat= Serial.parseFloat();
+  float MHeat= Serial.parseFloat();
+
+  setPointsSerial(mAC, MAC, mHeat, MHeat);
 }
+
+void setPointsSerial(float mAC, float MAC, float mHeat, float MHeat)
+{
+  minCond=mAC;
+  maxCond=MAC;
+  minHeat=mHeat;
+  maxHeat=MHeat;
+}
+
+//ISR per il sensore PIR
 void checkPresence()
 {
   lastTimeReadPir=millis();
   numPeoplePir+=1;
-  setPointsWithPeople();
+  setPoints(2, 3); //caso con persone
 }
 
+//Funzione per la lettura dei dati nel microfono
 void onPDMdata()
 {
   int bytesAvailable= PDM.available();
@@ -127,18 +154,23 @@ void onPDMdata()
   {
     if(sampleBuffer[i] > sound_threshold)
     {
-      lastTimeReadMic=millis();
+      lastPos= (lastPos+1)%n_sound_events;
+      timeSoundEvents[lastPos]=millis();
       numSounds++;
       break;
     }
   }
 
-  if(numPeopleMic++;(firstTimeReadMic- lastTimeReadMic) > sound_interval && numSounds > n_sound_events)
+  if((timeSoundEvents[lastPos]- timeSoundEvents[firstPos]) <= sound_interval && numSounds >= n_sound_events)
   {
-    setPointsWithPeople();
+    numPeopleMic++;
+    numSounds--;
+    firstPos= (firstPos+1)%n_sound_events; //Sposto l'indice del primo suono visto passando al successivo
+    setPoints(2, 3);
   }
 }
 
+//Stampa in loop sullo schermo LCD cone ldue schermate che si alternano
 void printOnLcd()
 {
   int numPeople=numPeoplePir+ numPeopleMic;
