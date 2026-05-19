@@ -1,0 +1,17 @@
+from part1_sw import *
+import cherrypy
+
+if __name__ == '__main__':
+    conf = {
+        '/': {'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
+        'tools.sessions.on': True,
+        'tools.response_headers.on': True,
+        'tools.response_headers.headers': [('Content-Type', 'application/json')]} 
+        }
+    
+    cherrypy.tree.mount(SmartHomeService (), '/', conf)
+    cherrypy.tree.mount(EventLog (), '/log', conf)
+    cherrypy.config.update({'server.socket_host': '10.24.110.101'})
+    cherrypy.config.update({'server.socket_port': 9090})
+    cherrypy.engine.start()
+    cherrypy.engine.block()
