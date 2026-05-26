@@ -9,8 +9,18 @@ import cherrypy
 
 DB_FILE = "catalog.json"
 
+'''
+Info:
+    ID
+    Description
+    Rest endpoint URL
+    MQTT info(ip,port,topic)
+    Resources List
+    Timestamp
+'''
+
 class FileManager:
-    def _init_(self):
+    def init(self):
         self.lock = Lock()
         self.data = {"devices": {}, "services": {}, "broker": {"ip":"localhost","port":1883}}
         self.load()
@@ -31,7 +41,7 @@ class FileManager:
             json.dump(self.data, f, indent=4)
     
     def read(self):
-        info= dict()
+        info = dict()
         with self.lock:
             with open(DB_FILE, "r") as f:
                 file=f.read()
@@ -48,12 +58,12 @@ class FileManager:
                 print("Error")
             self.save()
     
-    def delete(self, info):
+    def delete(self, id):
         with self.lock:
-            if("d" in info["ID"]):
-                self.data["devices"].pop(info["ID"])
-            elif("s" in info["ID"]):
-                self.data["services"].pop(info["ID"])
+            if("d" in id):
+                self.data["devices"].pop(id)
+            elif("s" in id):
+                self.data["services"].pop(id)
             else:
                 print("Error")
             self.save()
@@ -61,11 +71,31 @@ class FileManager:
 class Catalog(object):
     exposed=True
 
-    def __init__(self):
+    def _init_(self):
         threading.Thread(target=self._cleanup_loop, daemon=True).start()
         self.fm= FileManager
-        self.IDs= list()
-        self.cat=list()
+        self.cat= dict()
+        self.initializeCatalog()
+
+    def initializeCatalog(self):
+        for device in self.fm.data["device"]:
+            self.cat[device["ID"]] = device.copy()
+
+        for service in self.fm.data["service"]:
+            self.cat[service["ID"]] = service.copy()
+        
+
+    def _cleanup_loop(self):
+        toDelete = list()
+        now = time.time()
+        for id,body in self.cat.items():
+            if(now - body["timestamp"] > 120):
+                toDelete.append(id) 
+        for id in toDelete:
+            self.cat.pop(id)
+            self.fm.delete(id)
+
+        time.sleep(60)
 
     def getFileManager(self):
         return self.fm
@@ -77,39 +107,29 @@ class Catalog(object):
     def POST(self, *path, **query):
         body= cherrypy.request.body.read().decode('utf-8')
         bodyDict= json.loads(body.strip())
-        if(bodyDict["ID"] in self.IDs):
-            for e in self.cat:
-                if(e["ID"] == bodyDict["ID"]):
-                    e["timestamp"] = time.time()
-                    self.fm.update(e)
+        if(bodyDict["ID"] in self.cat.keys()):
+            self.cat[bodyDict["ID"]]["timestamp"] = time.time()
+            self.fm.update( )
         else:
-            self.IDs.append(bodyDict["ID"])
-            self.cat.append(bodyDict)
+            self.cat[bodyDict["ID"]] = bodyDict
             self.fm.write(bodyDict)
-
 
     def PUT(self, *path, **query):
         body= cherrypy.request.body.read().decode('utf-8')
         bodyDict= json.loads(body.strip())
-        if(bodyDict["ID"] in self.IDs):
-            for e in self.cat:
-                if(e["ID"] == bodyDict["ID"]):
-                    e["timestamp"] = time.time()
-                    self.fm.write(e)
+        if(bodyDict["ID"] in self.cat.keys()):
+            self.cat[bodyDict["ID"]]["timestamp"] = time.time()
         else:
-            self.IDs.append(bodyDict["ID"])
-            self.cat.append(bodyDict)
+            self.cat[bodyDict["ID"]] = bodyDict
             self.fm.write(bodyDict)
-
 
     def DELETE(self, *path, **query):
         body= cherrypy.request.body.read().decode('utf-8')
         bodyDict= json.loads(body.strip())
-        if(bodyDict["ID"] in self.IDs):
-            for e in self.cat:
-                if(e["ID"] == bodyDict["ID"]):
-                    e["timestamp"] = time.time()
-                    self.fm.write(e)
+        id = bodyDict["ID"]
+        if(id in self.cat.keys()):
+            self.cat.pop(id)
+            self.fm.delete(id)
         else:
             print("Error")
 
@@ -117,7 +137,7 @@ class Catalog(object):
 class CatalogClient(object):
     exposed=True
 
-    def __init__(self):
+    def _init_(self):
         self.catalog= Catalog
         self.fm=self.catalog.getFileManager()
 
