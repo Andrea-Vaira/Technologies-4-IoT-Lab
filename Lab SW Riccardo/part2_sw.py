@@ -158,13 +158,29 @@ class CatalogClient(object):
         return info["broker"]
 
     def register_device(self, payload):
-        pass
+        id = "d" + id_base
+        id_base += 1
+        payload["ID"] = id
+        self.fm.write(self,payload)
+        
 
     def refresh_device(self, id):
-        pass
+        info= self.fm.read()
+        info_devices = info["devices"]
+        payload = info_devices[id]
+        self.fm.write(self,payload)
+        
 
     def register_service(self, payload):
-        pass
+        id = "s" + id_base
+        id_base += 1
+        payload["ID"] = id
+        self.fm.write(self,payload)
+        
 
     def refresh_service(self, id):
-        pass
+        info= self.fm.read()
+        info_service = info["devices"]
+        payload = info_service[id]
+        self.fm.write(self,payload)
+        
