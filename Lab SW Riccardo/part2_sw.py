@@ -86,16 +86,17 @@ class Catalog(object):
         
 
     def _cleanup_loop(self):
-        toDelete = list()
-        now = time.time()
-        for id,body in self.cat.items():
-            if(now - body["timestamp"] > 120):
-                toDelete.append(id) 
-        for id in toDelete:
-            self.cat.pop(id)
-            self.fm.delete(id)
+        while True:
+            toDelete = list()
+            now = time.time()
+            for id,body in self.cat.items():
+                if(now - body["timestamp"] > 120):
+                    toDelete.append(id) 
+            for id in toDelete:
+                self.cat.pop(id)
+                self.fm.delete(id)
 
-        time.sleep(60)
+            time.sleep(60)
 
     def getFileManager(self):
         return self.fm
