@@ -1,8 +1,8 @@
+#Classes of Software Laboratory Part 2
 import os
 from threading import Lock
 import threading
 import time
-import random
 import json
 import cherrypy
 
@@ -11,7 +11,7 @@ DB_FILE = "catalog.json"
 '''
 Info:
     ID
-    Description
+    Descriptionx
     Rest endpoint URL
     MQTT info(ip,port,topic)
     Resources List
@@ -19,9 +19,9 @@ Info:
 '''
 
 class FileManager:
-    def init(self):
+    def _init_(self):
         self.lock = Lock()
-        self.data = {"devices": {}, "services": {}, "broker": {"ip":"localhost","port":1883}}
+        self.data = {"devices": {}, "services": {}, "broker": {"ip":"localhost","port":1883}, "sID" : 0, "dID" : 0}
         self.load()
 
     def load(self):
@@ -70,7 +70,7 @@ class FileManager:
 class Catalog(object):
     exposed=True
 
-    def _init_(self):
+    def __init__(self):
         threading.Thread(target=self._cleanup_loop, daemon=True).start()
         self.fm= FileManager
         self.cat= dict()
@@ -82,68 +82,6 @@ class Catalog(object):
 
         for service in self.fm.data["service"]:
             self.cat[service["ID"]] = service.copy()
-        
-
-    def _cleanup_loop(self):
-        while True:
-            toDelete = list()
-            now = time.time()
-            for id,body in self.cat.items():
-                if(now - body["timestamp"] > 120):
-                    toDelete.append(id) 
-            for id in toDelete:
-                self.cat.pop(id)
-                self.fm.delete(id)
-
-            time.sleep(60)
-
-    def getFileManager(self):
-        return self.fm
-    
-    def GET(self, *path, **query):
-        data=self.fm.read()
-        return json.dumps(data).encode()
-
-    def POST(self, *path, **query):
-        body= cherrypy.request.body.read().decode('utf-8')
-        bodyDict= json.loads(body.strip())
-        if(bodyDict["ID"] in self.cat.keys()):
-            self.cat[bodyDict["ID"]]["timestamp"] = time.time()
-            self.fm.update( )
-        else:
-            self.cat[bodyDict["ID"]] = bodyDict
-            self.fm.write(bodyDict)
-
-    def PUT(self, *path, **query):
-        body= cherrypy.request.body.read().decode('utf-8')
-        bodyDict= json.loads(body.strip())
-        if(bodyDict["ID"] in self.cat.keys()):
-            self.cat[bodyDict["ID"]]["timestamp"] = time.time()
-        else:
-            self.cat[bodyDict["ID"]] = bodyDict
-            self.fm.write(bodyDict)
-
-    def DELETE(self, *path, **query):
-        body= cherrypy.request.body.read().decode('utf-8')
-        bodyDict= json.loads(body.strip())
-        id = bodyDict["ID"]
-        if(id in self.cat.keys()):
-            self.cat.pop(id)
-            self.fm.delete(id)
-        else:
-            print("Error")
-
-
-BROKER_IP = "broker.hivemq.com"
-BROKER_PORT = 1883
-
-class CatalogBridge:
-    exposed = True
-
-    def __init__(self):
-        threading.Thread(target=self._cleanup_loop, daemon=True).start()
-        self.lock = Lock()
-        self.data = {"broker":{"ip":BROKER_IP,"port":BROKER_PORT},"devices": {}, "services": {}}
         
     def _cleanup_loop(self):
         toDelete = list()
@@ -157,25 +95,103 @@ class CatalogBridge:
 
         time.sleep(60)
 
+    def getFileManager(self):
+        return self.fm
+    
     def GET(self, *path, **query):
         data=self.fm.read()
         return json.dumps(data).encode()
-
-
-
-
-
-if __name__ == '__main__':
-    conf = {
-        '/': {'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
-        'tools.sessions.on': True,
-        'tools.response_headers.on': True,
-        'tools.response_headers.headers': [('Content-Type', 'application/json')]} 
-        }
     
-    
-    cherrypy.tree.mount(Catalog (), '/', conf)
-    cherrypy.config.update({'server.socket_host': '10.24.110.101'})
-    cherrypy.config.update({'server.socket_port': 9090})
-    cherrypy.engine.start()
-    cherrypy.engine.block()
+    #Distinguish create and modify
+    def POST(self, *path, **query):
+        body= cherrypy.request.body.read().decode('utf-8')
+        bodyDict= json.loads(body.strip())
+        if(bodyDict["ID"] not in self.cat.keys()):
+            self.add(bodyDict)                      
+        else:
+            print("Item already in the catalog")
+
+    def PUT(self, *path, **query):
+        body= cherrypy.request.body.read().decode('utf-8')
+        bodyDict= json.loads(body.strip())
+        if(bodyDict["ID"] in self.cat.keys()):
+            self.modify(bodyDict["ID"])                      
+        else:
+            print("Item not in the catalog")
+        
+    def add(self,body):
+        body["timestamp"] = time.time()
+        self.cat[body["ID"]] = body
+        self.fm.write(body)
+
+    def update(self,id):
+        body = self.cat[id].copy()
+        body["timestamp"] = time.time()
+        self.cat[id] = body
+        self.fm.write(body)
+
+    def DELETE(self, *path, **query):
+        body= cherrypy.request.body.read().decode('utf-8')
+        bodyDict= json.loads(body.strip())
+        id = bodyDict["ID"]
+        if(id in self.cat.keys()):
+            self.cat.pop(id)
+            self.fm.delete(id)
+        else:
+            print("Error")
+
+    def getDeviceID(self):
+        id = f"d{self.fm.data["dID"]:06}"
+        self.fm.data["dID"] += 1
+        return id
+
+    def getServiceID(self):
+        id = f"d{self.fm.data['sID']:06}"
+        self.fm.data["sID"] += 1
+        return id
+
+
+
+class CatalogClient(object):
+    exposed=True
+
+    def _init_(self):
+        self.catalog= Catalog
+        self.fm=self.catalog.getFileManager()
+
+    def get_catalog(self):
+        return self.catalog.GET()
+
+    def get_devices(self):
+        info= self.fm.read()
+        return info["devices"]
+
+    def get_device(self, id):
+        info= self.fm.read()
+        return info["devices"][id]
+
+    def get_broker(self):
+        info= self.fm.read()
+        return info["broker"]
+
+    def register_device(self, payload):
+        id = self.catalog.getDeviceID()
+        payload["ID"] = id
+        self.catalog.add(payload)
+
+    def refresh_device(self, id):
+        if(id in self.catalog.cat.keys()):
+            self.catalog.update(id)
+        else:
+            print("Error, device not in the catalog")
+
+    def register_service(self, payload):
+        id = self.catalog.getServiceID()
+        payload["ID"] = id
+        self.catalog.add(payload)
+
+    def refresh_service(self, id):
+        if(id in self.catalog.cat.keys()):
+            self.catalog.update(id)
+        else:
+            print("Error, service not in the catalog")
