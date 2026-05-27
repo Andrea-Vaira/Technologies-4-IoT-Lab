@@ -1,9 +1,8 @@
 //Exercise 1 Laboratory 3
 #include <SPI.h> 
 #include <WiFiNINA.h>
-//#include "arduino_secrets.h"
-#define SECRET_SSID "Galaxy A55 RS"
-#define SECRET_PASS "RichiS04"
+#define SECRET_SSID "XXXXX"
+#define SECRET_PASS "XXXXX"
 #define GROUP_NAME "ArduinoGroup6"
 
 int LED_PIN= 3;
@@ -99,16 +98,15 @@ void printResponse(WiFiClient client, int code, String body){
   }
 }
 
-String senMlEncode(String name, int value, String unit)
+String senMlEncode(String name, float value, String unit)
 {
-  String json;
-  json = "{";
+  String json = "{";
   json += "\"bn\":\"" + String(GROUP_NAME) + "\",";
   json += "\"e\":[{";
   json += "\"n\":\"" + name + "\",";
   json += "\"t\":" + String(millis()) + ",";
-  json += "\"v\":" + String(value) + ",";
-  json += "\"u\":" + unit; // unit is passed with quotes or as literal null
+  json += "\"v\":" + String(value) + ","; 
+  json += "\"u\":\"" + unit + "\""; // unit is passed with quotes or as literal null       
   json += "}]}";
   return json;
 }

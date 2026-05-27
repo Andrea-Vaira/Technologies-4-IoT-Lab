@@ -2,8 +2,8 @@
 #include <SPI.h> 
 #include <WiFiNINA.h>
 #include <ArduinoHttpClient.h>
-#define SECRET_SSID "miao"
-#define SECRET_PASS "12345678"
+#define SECRET_SSID "XXXXX"
+#define SECRET_PASS "XXXXXX"
 #define GROUP_NAME "ArduinoGroup6"
 
 int LED_PIN=3;
@@ -68,8 +68,8 @@ String senMlEncode(String name, float value, String unit)
   json += "\"e\":[{";
   json += "\"n\":\"" + name + "\",";
   json += "\"t\":" + String(millis()) + ",";
-  json += "\"v\":" + String(value) + ","; // Questa virgola separa 'v' da 'u' (corretto)
-  json += "\"u\":\"" + unit + "\"";        // Nota i doppi apici \" attorno a unit
+  json += "\"v\":" + String(value) + ","; 
+  json += "\"u\":\"" + unit + "\""; // unit is passed with quotes or as literal null       
   json += "}]}";
   return json;
 }
