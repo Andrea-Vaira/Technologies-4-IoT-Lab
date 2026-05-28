@@ -7,6 +7,18 @@ import json
 import cherrypy
 import paho.mqtt.client as mqtt
 
+'''
+COMANDI:
+
+
+python '.\softwere\lab3 Paolo\es7.py'
+python '.\softwere\lab3 Paolo\check_catalog.py'  
+
+python '.\softwere\lab3 Paolo\simulate_device.py'  
+'''
+
+
+
 DB_FILE = "catalog.json"
 
 '''
