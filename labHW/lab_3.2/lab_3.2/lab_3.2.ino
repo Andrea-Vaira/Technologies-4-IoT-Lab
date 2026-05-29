@@ -56,7 +56,8 @@ void loop() {
   client.print(body);
   client.endRequest();
   int ret= client.responseStatusCode();
-  String resp= client.responseBody();
+  Serial.print("Response code: ");
+  Serial.println(ret);
 
   delay(5000);
 }
