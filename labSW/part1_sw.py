@@ -49,6 +49,9 @@ class SmartHomeService(object):
         self.eventLogger= EventLog()
 
     def GET(self, *path, **query):
+        if not path:
+            raise cherrypy.HTTPError(400, "Missing path")
+        
         if(path[0] == "sensors"):
             match len(path):
                 case 1:
@@ -106,36 +109,12 @@ class SmartHomeService(object):
         elif(path[0] == "actuators"):
             match len(path):
                 case 1:
-                    dTot=list()
-                    for camera in self.roomNames:
-                        d=dict()
-                        d["bn"]= str(path[0]+"/"+camera)
-                        d["e"]=list()
-                        for attuatori in self.actuators: 
-                            d2=dict()
-                            d2["t"]= time.time()
-                            d2["n"]= attuatori
-                            if(len(self.rooms[camera].getActs().get(attuatori)) >0):
-                                d2["u"]= self.actsUnits[attuatori]
-                                d2["v"]= self.rooms[camera].getActs().get(attuatori)[-1]
-                            d["e"].append(d2)
-                        self.eventLogger.postEvent(d)
-                        dTot.append(d)
+                    dTot= self._generate_tot(path)
                     return json.dumps(dTot).encode()
                 case 2:
                     dTot=list()
                     if(path[1] in self.roomNames):
-                        d=dict()
-                        d["bn"]= str(path[0]+"/"+path[1])
-                        d["e"]=list()
-                        for attuatori in self.actuators: 
-                            d2=dict()
-                            d2["t"]= time.time()
-                            d2["n"]= attuatori
-                            if(len(self.rooms[path[1]].getActs().get(attuatori)) >0):
-                                d2["u"]= self.actsUnits[attuatori]
-                                d2["v"]= self.rooms[path[1]].getActs().get(attuatori)[-1]
-                            d["e"].append(d2)
+                        d= self._generate_room(path,path[1])
                         self.eventLogger.postEvent(d)
                         dTot.append(d)
                         return json.dumps(dTot).encode()
@@ -146,13 +125,7 @@ class SmartHomeService(object):
                         if(path[2] in self.actuators):
                             d=dict()
                             d["bn"]= str(path[0]+"/"+path[1]+"/"+path[2])
-                            d2=dict()
-                            d2["t"]= time.time()
-                            d2["n"]= path[2]
-                            if(len(self.rooms[path[1]].getActs().get(path[2])) >0):
-                                d2["u"]= self.actsUnits[path[2]]
-                                d2["v"]= self.rooms[path[1]].getActs().get(path[2])[-1]
-                            d['e']=d2
+                            d["e"] = self._generate_actuator(path, path[1], path[2])
                             self.eventLogger.postEvent(d)
                             return json.dumps(d).encode()
                         else:
@@ -162,6 +135,36 @@ class SmartHomeService(object):
         else:
              raise cherrypy.HTTPError(400, "Wrong source, you have to use sensors or actuators")
     
+
+
+
+
+    def _generate_tot(self,path):
+        dTot=list()
+        for camera in self.roomNames:
+            d= self._generate_room(self,path,camera)
+            dTot.append(d)
+        return dTot
+
+
+    def _generate_room(self,path,room):
+        d=dict()
+        d["bn"]= str(path[0]+"/"+room)
+        d["e"]=list()
+        for attuatori in self.actuators: 
+            d2 = self._generate_actuator(self,path,room,attuatori)
+            d["e"].append(d2)
+        return d
+
+    def _generate_actuator(self,path,room,actuator):
+        d2=dict()
+        d2["t"]= time.time()
+        d2["n"]= actuator
+        if(len(self.rooms[room].getActs().get(actuator)) >0):
+            d2["u"]= self.actsUnits[actuator]
+            d2["v"]= self.rooms[room].getActs().get(actuator)[-1]
+        return d2
+
     def POST(self, *path, **query):
         if(len(path)>0 and path[0] == "actuators"):
             if(path[1] in self.roomNames):
@@ -185,6 +188,9 @@ class SmartHomeService(object):
                     
                     if(bodyDict["n"] == "blinds" and (bodyDict["v"] < 0 or bodyDict["v"] > 100) and bodyDict["u"] == "%"):
                         raise cherrypy.HTTPError(400, "Values out of Range, blinds only between 0 and 100")
+                    
+                    if(bodyDict["n"] == "led" and (bodyDict["v"] != "on" and bodyDict["v"] != "off") and bodyDict["u"] == "boolean"):
+                        raise cherrypy.HTTPError(400, "Values out of Range, lights only on and off")
                     
                     self.eventLogger.postEvent(bodyDictGeneral)
                     self.rooms[path[1]].setAct(bodyDict["n"], bodyDict["v"])
