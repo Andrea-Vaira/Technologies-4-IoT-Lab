@@ -55,35 +55,12 @@ class SmartHomeService(object):
         if(path[0] == "sensors"):
             match len(path):
                 case 1:
-                    dTot=list()
-                    for camera in self.roomNames:
-                        d=dict()
-                        d["bn"]= str(path[0]+"/"+camera)
-                        d["e"]=list()
-                        for sensori in self.sens: 
-                            d2=dict()
-                            d2["t"]= time.time()
-                            d2["n"]= sensori
-                            d2["u"]= self.rooms[camera].getSens().get(sensori)[1]
-                            d2["v"]= self.rooms[camera].getSens().get(sensori)[0]
-                            d["e"].append(d2)
-                        
-                        self.eventLogger.postEvent(d)
-                        dTot.append(d)
+                    dTot = self._add_tot(self,path)
                     return json.dumps(dTot).encode()
                 case 2:
                     dTot=list()
                     if(path[1] in self.roomNames):
-                        d=dict()
-                        d["bn"]= str(path[0]+"/"+path[1])
-                        d["e"]=list()
-                        for sensori in self.sens: 
-                            d2=dict()
-                            d2["t"]= time.time()
-                            d2["n"]= sensori
-                            d2["u"]= self.rooms[path[1]].getSens().get(sensori)[1]
-                            d2["v"]= self.rooms[path[1]].getSens().get(sensori)[0]
-                            d["e"].append(d2)
+                        d=self._add_room(self,path,path[1])
                         self.eventLogger.postEvent(d)
                         dTot.append(d)
                         return json.dumps(dTot).encode()
@@ -94,11 +71,7 @@ class SmartHomeService(object):
                         if(path[2] in self.sens):
                             d=dict()
                             d["bn"]= str(path[0]+"/"+path[1]+"/"+path[2])
-                            d2=dict()
-                            d2["t"]= time.time()
-                            d2["n"]= path[2]
-                            d2["u"]= self.rooms[path[1]].getSens().get(path[2])[1]
-                            d2["v"]= self.rooms[path[1]].getSens().get(path[2])[0]
+                            d2=self._add_actuator(path,path[1],path[2])
                             d['e']=d2
                             self.eventLogger.postEvent(d)
                             return json.dumps(d).encode()
@@ -135,9 +108,31 @@ class SmartHomeService(object):
         else:
              raise cherrypy.HTTPError(400, "Wrong source, you have to use sensors or actuators")
     
+    def _add_tot(self,path):
+        dTot=list()
+        for camera in self.roomNames:
+            d=self._add_room(self,path,camera)
+            self.eventLogger.postEvent(d)
+            dTot.append(d)
+        return dTot
 
 
+    def _add_room(self,path,room):
+        d=dict()
+        d["bn"]= str(path[0]+"/"+room)
+        d["e"]=list()
+        for sensori in self.sens: 
+            d2=self._add_actuator(path,room,sensori)
+            d["e"].append(d2)
+        return d
 
+    def _add_actuator(self,path,room,actuator):
+        d2=dict()
+        d2["t"]= time.time()
+        d2["n"]= actuator
+        d2["u"]= self.rooms[room].getSens().get(actuator)[1]
+        d2["v"]= self.rooms[room].getSens().get(actuator)[0]
+        return d2
 
     def _generate_tot(self,path):
         dTot=list()
@@ -145,7 +140,6 @@ class SmartHomeService(object):
             d= self._generate_room(self,path,camera)
             dTot.append(d)
         return dTot
-
 
     def _generate_room(self,path,room):
         d=dict()
@@ -210,7 +204,7 @@ class EventLog(object):
         match len(path):
             case 1:
                     if(len(query) > 0 and ("room" in query.keys() ) and ("since" in query.keys())):
-                        res=dict()
+                        res=list()
                         for e in self.events:
                             if((query["room"] in e["bn"] ) and (e["e"]["t"]>= query["since"])):
                                 res.append(e)
@@ -219,7 +213,7 @@ class EventLog(object):
                         return json.dumps(self.events).encode()
             case 2:
                if(path[1] in self.roomNames and path[0] == "log" ):
-                    res=dict()
+                    res=list()
                     for e in self.events:
                         if(path[1] in e["bn"]):
                             res.append(e)
@@ -249,6 +243,7 @@ class EventLog(object):
                     newList.append(e)
             self.events=newList
             return count
+        return "0".encode('utf-8')
         
 if __name__ == '__main__':
     conf = {
