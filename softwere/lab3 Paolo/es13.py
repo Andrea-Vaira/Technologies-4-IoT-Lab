@@ -3,21 +3,26 @@ import time
 import json
 import threading
 import requests
-from es5e6_Lorenzo_con_modifiche_di_paolo import *
+import cherrypy
 import paho.mqtt.client as mqtt
+
+catalog_url= "http://localhost:8080" #Da definire
 
 class SmartHomeController(object):
     exposed=True
 
     def __init__(self):
-        self.catalog= Catalog
-        self.fm=self.catalog.getFileManager()
-        self.id= self.catalog.getDeviceID()
-        body={}
-        body["ID"]=self.id
-        self.catalog.add(body)
+        threading.Thread(target=self.refreshRegistration_loop, daemon=True).start()
+        self.body={}
+        self.body["ID"]=self.id
 
-        self.broker = "iot.eclipse.org" 
+        self.time= time.time()
+        try:
+            requests.post((catalog_url+"/registration"), data=self.body) #Sends to the catalog the POST to be registered
+        except Exception as e:
+            print("Error, Not Registred in the Catalog")
+
+        self.broker = "hivemq.com" 
         self.port = 1883
         self.mqtt_client = mqtt.Client(client_id="SmartHomeEventController")
         self.mqtt_client.on_connect = self.on_connect
@@ -29,6 +34,14 @@ class SmartHomeController(object):
             print(f"MQTT Connected to {self.broker}:{self.port}\n")
         except Exception as e:
             print(f"MQTT Not Connected {e}\n")
+
+    def refreshRegistration_loop(self):
+        while(True):
+            now=time.time()
+            if((now - self.time)> 60): #Every 60 seconds sends an update for the registration on the catalog
+                requests.put(catalog_url, data=self.body)
+                self.time=time.time()
+
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:

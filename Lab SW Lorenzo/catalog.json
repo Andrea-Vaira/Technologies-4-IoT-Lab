@@ -1,0 +1,33 @@
+{
+    "devices": {},
+    "services": {
+        "s000000": {
+            "ID": "s000000",
+            "description": "Service that manages the sensor system",
+            "rest": "http://localhost:8080/sensor",
+            "mqtt": {
+                "ip": "localhost",
+                "port": 1883
+            },
+            "resources": "Boh",
+            "timestamp": 1780676671.6093934
+        },
+        "s000001": {
+            "ID": "s000001",
+            "description": "Service that manages the actuator system",
+            "rest": "http://localhost:8080/actuator",
+            "mqtt": {
+                "ip": "localhost",
+                "port": 1883
+            },
+            "resources": "Boh",
+            "timestamp": 1780676671.6125546
+        }
+    },
+    "broker": {
+        "ip": "localhost",
+        "port": 1883
+    },
+    "sID": 2,
+    "dID": 0
+}
