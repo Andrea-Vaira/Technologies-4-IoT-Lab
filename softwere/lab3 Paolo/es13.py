@@ -12,17 +12,22 @@ class SmartHomeController(object):
     exposed=True
 
     def __init__(self):
-        threading.Thread(target=self.refreshRegistration_loop, daemon=True).start()
-        self.body={}
-        self.body["ID"]=self.id
-
+        #Regitration over REST for the Catalog
         self.time= time.time()
+        self.body={}
+        '''Necessario un modo per assegnare un ID senza passare dal Catalog Client per usare REST, Se facessimo
+        partire il conteggio degli id da 1 sul FileManager/Catalog, potremmo assegnare al Controllore s00000 direttamente.'''
+        self.body["ID"]= "s00000" 
+        self.body["description"]="Service that controls the entire system"
+        self.body["timestamp"]=self.time
         try:
-            requests.post((catalog_url+"/registration"), data=self.body) #Sends to the catalog the POST to be registered
+            requests.post((catalog_url+"/registration"), data=self.body) #Registers to the catalog via REST using POST
         except Exception as e:
             print("Error, Not Registred in the Catalog")
+        threading.Thread(target=self.refreshRegistration_loop, daemon=True).start()
 
-        self.broker = "hivemq.com" 
+        #Management with MQTT of Arduino's actuators and sensors
+        self.broker = "broker.hivemq.com" 
         self.port = 1883
         self.mqtt_client = mqtt.Client(client_id="SmartHomeEventController")
         self.mqtt_client.on_connect = self.on_connect
@@ -35,11 +40,12 @@ class SmartHomeController(object):
         except Exception as e:
             print(f"MQTT Not Connected {e}\n")
 
+
     def refreshRegistration_loop(self):
         while(True):
             now=time.time()
             if((now - self.time)> 60): #Every 60 seconds sends an update for the registration on the catalog
-                requests.put(catalog_url, data=self.body)
+                requests.put(catalog_url+"/registration", data=self.body)
                 self.time=time.time()
 
 
@@ -59,3 +65,12 @@ class SmartHomeController(object):
             print("MQTT Received")
         except Exception as e:
             print(f"MQTT Error: {e}")
+
+if __name__ == '__main__':
+    conf = {'/': {'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
+                  'tools.response_headers.on': True,
+                  'tools.response_headers.headers': [('Content-Type', 'application/json')]}}
+    cherrypy.tree.mount(SmartHomeController(), '/', conf)
+    cherrypy.config.update({'server.socket_port': 9090})
+    cherrypy.engine.start()
+    cherrypy.engine.block()
