@@ -38,6 +38,8 @@ class SmartHomeController(object):
         self.tempTopic="/tiot/group6/+/temperature"
         self.ledTopic="/tiot/group6/{}/led"
         self.motionTopic= "/tiot/group6/+/motion"
+        self.displayTopic="/tiot/group6/{}/display"
+        self.fanTopic="/tiot/group6/{}/fan"
         self.alertTopic="/tiot/group6/alert"
         self.mqtt_client = mqtt.Client(client_id="SmartHomeEventController")
         self.mqtt_client.on_connect = self.on_connect

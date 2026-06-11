@@ -21,15 +21,13 @@ const int B=4275;
 const long int R0=100000;
 const int T0= 298.13;
 volatile float T=0.0;
+long lastTimeTempRead; 
 int potSpeed=0;
 int brightness=0;
 LiquidCrystal_PCF8574 lcd(0x27);
 const int sound_interval= 1000*60*1;//1 minutes
 const int sound_threshold=1500;
 const int timeout_sound=1000*60*1; //1 minutes
-volatile int timeSoundEvents[n_sound_events]; //Buffer for times for michrophone events
-volatile int firstPos=0; //Indexes for the buffer 
-volatile int lastPos=-1; //starts from -1 so that at the first reading is placed at 0
 short sampleBuffer[512];
 volatile int numSounds=0;
 
@@ -44,7 +42,10 @@ String base_topic = "/tiot/group6/livingroom";
 String device_id = "arduino_d001";
 String tempTopic = "/tiot/group6/livingroom/temperature"; 
 String motionTopic = "/tiot/group6/livingroom/motion"; 
+
 String ledTopicSubscribed= "/tiot/group6/livingroom/led";
+String fanTopicSubscribe= "/tiot/group6/livingroom/fan";
+String displayTopicSubscribe= "/tiot/group6/livingroom/display";
 String alertTopic="/tiot/group6/alert"
 int status= WL_IDLE_STATUS;
 
@@ -53,6 +54,8 @@ HttpClient clientHttp= HttpClient(wifi, catalog_address, catalog_port);
 // Callback forward declaration
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 PubSubClient clientMqtt(broker_address.c_str(), broker_port, mqttCallback, wifi);
+const int capacity = JSON_OBJECT_SIZE(2) + JSON_ARRAY_SIZE(1) + JSON_OBJECT_SIZE(4) + 100;
+DynamicJsonDocument msgReceived(capacity);
 
 void setup() {
   //Setup Serial Port
@@ -90,22 +93,30 @@ void setup() {
     Serial.println("Failed to start PDM!");
     while (1);
   }
+  lastTimeTempRead=millis();
 
+  //Setup for registration to the Catalog
   registerToCatalog();
-  Scheduler.startLoop(refreshRegistration());
+  Scheduler.startLoop(refreshRegistration);
 }
 
 void loop() {
   if (!clientMqtt.connected()) {
     reconnectMQTT();
   }
+  clientMqtt.loop();
 
-  //Read of the voltage and formulas to get the value in Celsius
-  int V= analogRead(TEMPPIN);
-  float R= (1023.0/(float)V -1.0)*R0; 
-  T= (1.0/(log(R/R0)/B + (1.0/T0)))- 273.1;
-
-  delay(10000);
+  long now=millis();
+  if((now- lastTimeTempRead) >= 10000)
+  {
+    //Read of the voltage and formulas to get the value in Celsius
+    int V= analogRead(TEMPPIN);
+    float R= (1023.0/(float)V -1.0)*R0; 
+    T= (1.0/(log(R/R0)/B + (1.0/T0)))- 273.1;
+    lastTimeTempRead=millis();
+    String body=senMlEncode("temperature", T, "Cel");
+    clientMqtt.publish(tempTopic.c_str(), body.c_str())
+  }
 }
 //MQTT callback for every message that arrives from the broker
 void mqttCallback(char* topic, byte* payload, unsigned int length)
@@ -116,18 +127,34 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     Serial.println(err.c_str());
   }
 
-  if (msqReceived["e"][0]["n"] == "led") 
+  if (msgReceived["e"][0]["n"] == "led") 
   {
-    if (msgReceived["e"][0]["v"] == "on") {
-      digitalWrite(pinLed, HIGH);
+    if (msgReceived["e"][0]["v"] == "on") 
+    {
+      digitalWrite(RLED, HIGH);
       Serial.println("Led swithced ON");
     }
-    if (msgReceived["e"][0]["v"] == "off") {
-      digitalWrite(pinLed, LOW);
+    if (msgReceived["e"][0]["v"] == "off") 
+    {
+      digitalWrite(RLED, LOW);
       Serial.println("Led Switched OFF");
     }
   }
-  else if(msqReceived["e"][0]["n"] == "led")
+  else if(msgReceived["e"][0]["n"] == "fan")
+  {
+    float val=msgReceived["e"][0]["v"];
+    potSpeed= map(val , 0, 100, 0, 255); //With higher value the FAN rotate more rapidly
+    analogWrite(FANPIN, potSpeed);
+  }
+  else if(msgReceived["e"][0]["n"] == "display")
+  {
+    String text=msgReceived["e"][0]["v"];
+    printOnLCD(text);
+  }
+  else
+  {
+    Serial.println("Error, Topic non right");
+  }
 }
 
 //Fuction for Catalog Registration
@@ -167,10 +194,16 @@ void refreshRegistration()
 
 void reconnectMQTT()
 {
-  while (clientMqtt.state() != MQTT_CONNECTED) {
-    if (clientMqtt.connect("TiotGroup6")) {
+  while (clientMqtt.state() != MQTT_CONNECTED) 
+  {
+    if (clientMqtt.connect("TiotGroup6")) 
+    {
       clientMqtt.subscribe(ledTopicSubscribed.c_str());
-    } else {
+      clientMqtt.subscribe(fanTopicSubscribe.c_str());
+      clientMqtt.subscribe(displayTopicSubscribe.c_str());
+    } 
+    else 
+    {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
@@ -183,7 +216,7 @@ void reconnectMQTT()
 void checkPresence()
 {
   //Now we must publish a message to the Broker to say that motion is TRUE
-  String body=senMLEncode(motion, String(True), "boolean");
+  String body=senMlEncode(motion, String(True), "boolean");
   mqttClient.publish(motionTopic.c_str(), body.c_str())
 }
 
@@ -198,11 +231,20 @@ void onPDMdata()
   {
     if(sampleBuffer[i] > sound_threshold)
     {
-      String body=senMLEncode(motion, String(True), "boolean");
+      String body=senMlEncode(motion, String(True), "boolean");
       mqttClient.publish(motionTopic.c_str(), body.c_str())
       break;
     }
   }
+}
+
+void printOnLCD(String text)
+{
+  lcd.setCursor(0,0);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(text);
+  delay(5*1000);
 }
 
 String senMlEncode(String name, String value, String unit)
