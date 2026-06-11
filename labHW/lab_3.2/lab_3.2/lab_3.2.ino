@@ -70,7 +70,7 @@ String senMlEncode(String name, float value, String unit)
   json += "\"n\":\"" + name + "\",";
   json += "\"t\":" + String(millis()) + ",";
   json += "\"v\":" + String(value) + ","; 
-  json += "\"u\":\"" + unit + "\""; // unit is passed with quotes or as literal null       
+  json += "\"u\":\"" + unit + "\"";      
   json += "}]}";
   return json;
 }

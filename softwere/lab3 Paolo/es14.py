@@ -1,4 +1,4 @@
-#Software Laboratory Part 3, Exercise 13
+#Software Laboratory Part 3, Exercise 14, Complete Controller communicating with the Arduino and the Catalog
 import time
 import json
 import threading
@@ -123,12 +123,12 @@ class SmartHomeController(object):
         self.roomStatistics[room]["avg"]= sum(self.roomsReadings[room]["temperatures"])/len(self.roomsReadings[room]["temperatures"])
     
     def valuateCommands(self, room, lastVal):
-        payload= {"bn":room, "n":"led", "v":False, "u":"boolean", "t":time.time()}
+        payload= {"bn":room, "n":"led", "v":"off", "u":"boolean", "t":time.time()}
         if self.roomsReadings[room]["motionStatus"]== True:
             if lastVal >= self.configurable_threshold:
                 self.mqtt_client.publish(self.ledTopic.format(room), json.dumps(payload))
             else:
-                payload["v"]= True #Switch On the LED
+                payload["v"]="on" #Switch On the LED
                 self.mqtt_client.publish(self.ledTopic.format(room), json.dumps(payload))
         else:
             self.mqtt_client.publish(self.ledTopic.format(room), json.dumps(payload))
