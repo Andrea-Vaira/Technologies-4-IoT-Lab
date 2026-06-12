@@ -30,11 +30,12 @@ const int sound_threshold=1500;
 const int timeout_sound=1000*60*1; //1 minutes
 short sampleBuffer[512];
 volatile int numSounds=0;
+volatile bool motionFlag= false;
 
 //Information related to connections, the Broker and servers
 char catalog_address[]="xx.xx.xx.xx";
 int catalog_port=9090;
-cahr broker_address[] = "://broker.hivemq.com";
+char broker_address[] = "broker.hivemq.com";
 int broker_port = 1883;
 //For being compatible with sofware labs we need to specify in the topics the room
 String room="livingroom";
@@ -46,14 +47,14 @@ String motionTopic = "/tiot/group6/livingroom/motion";
 String ledTopicSubscribed= "/tiot/group6/livingroom/led";
 String fanTopicSubscribe= "/tiot/group6/livingroom/fan";
 String displayTopicSubscribe= "/tiot/group6/livingroom/display";
-String alertTopic="/tiot/group6/alert"
+String alertTopic="/tiot/group6/alert";
 int status= WL_IDLE_STATUS;
 
 WiFiClient wifi;
 HttpClient clientHttp= HttpClient(wifi, catalog_address, catalog_port);
 // Callback forward declaration
 void mqttCallback(char* topic, byte* payload, unsigned int length);
-PubSubClient clientMqtt(broker_address.c_str(), broker_port, mqttCallback, wifi);
+PubSubClient clientMqtt(broker_address, broker_port, mqttCallback, wifi);
 const int capacity = JSON_OBJECT_SIZE(2) + JSON_ARRAY_SIZE(1) + JSON_OBJECT_SIZE(4) + 100;
 DynamicJsonDocument msgReceived(capacity);
 
@@ -106,6 +107,14 @@ void loop() {
   }
   clientMqtt.loop();
 
+  //If a noise or the PIR activate means that there is someone, so a message is published
+  if(motionFlag == true)
+  {
+    String body=senMlEncode("motion", String(true), "boolean");
+    clientMqtt.publish(motionTopic.c_str(), body.c_str());
+    motionFlag=false;
+  }
+
   long now=millis();
   if((now- lastTimeTempRead) >= 10000)
   {
@@ -114,8 +123,8 @@ void loop() {
     float R= (1023.0/(float)V -1.0)*R0; 
     T= (1.0/(log(R/R0)/B + (1.0/T0)))- 273.1;
     lastTimeTempRead=millis();
-    String body=senMlEncode("temperature", T, "Cel");
-    clientMqtt.publish(tempTopic.c_str(), body.c_str())
+    String body=senMlEncode("temperature", String(T), "Cel");
+    clientMqtt.publish(tempTopic.c_str(), body.c_str());
   }
 }
 //MQTT callback for every message that arrives from the broker
@@ -167,7 +176,6 @@ void registerToCatalog()
   clientHttp.sendHeader("Content-Type", "application/json");
   clientHttp.sendHeader("Content-Length", body.length());
   clientHttp.beginBody();
-  SerialHttp.println(body);
   clientHttp.print(body);
   clientHttp.endRequest();
   int ret= clientHttp.responseStatusCode();
@@ -184,7 +192,6 @@ void refreshRegistration()
   clientHttp.sendHeader("Content-Type", "application/json");
   clientHttp.sendHeader("Content-Length", body.length());
   clientHttp.beginBody();
-  SerialHttp.println(body);
   clientHttp.print(body);
   clientHttp.endRequest();
   int ret= clientHttp.responseStatusCode();
@@ -205,7 +212,7 @@ void reconnectMQTT()
     else 
     {
       Serial.print("failed, rc=");
-      Serial.print(client.state());
+      Serial.print(clientMqtt.state());
       Serial.println(" try again in 5 seconds");
       delay(5000);
     }
@@ -215,9 +222,8 @@ void reconnectMQTT()
 //ISR for PIR sensor
 void checkPresence()
 {
-  //Now we must publish a message to the Broker to say that motion is TRUE
-  String body=senMlEncode(motion, String(True), "boolean");
-  mqttClient.publish(motionTopic.c_str(), body.c_str())
+  //Set the motion flag so that in the loop a message get published
+  motionFlag=true;
 }
 
 //Function for the read of the data from the michropohone
@@ -231,8 +237,8 @@ void onPDMdata()
   {
     if(sampleBuffer[i] > sound_threshold)
     {
-      String body=senMlEncode(motion, String(True), "boolean");
-      mqttClient.publish(motionTopic.c_str(), body.c_str())
+      //Set the motion flag so that in the loop a message get published
+      motionFlag=true;
       break;
     }
   }
