@@ -31,6 +31,7 @@ const int timeout_sound=1000*60*1; //1 minutes
 short sampleBuffer[512];
 volatile int numSounds=0;
 volatile bool motionFlag= false;
+volatile bool soundFlag= false;
 
 //Information related to connections, the Broker and servers
 char catalog_address[]="xx.xx.xx.xx";
@@ -42,7 +43,8 @@ String room="livingroom";
 String base_topic = "/tiot/group6/livingroom"; 
 String device_id = "arduino_d001";
 String tempTopic = "/tiot/group6/livingroom/temperature"; 
-String motionTopic = "/tiot/group6/livingroom/motion"; 
+String motionTopic = "/tiot/group6/livingroom/motion";
+String soundTopic= "/tiot/group6/livingroom/sound";
 
 String ledTopicSubscribed= "/tiot/group6/livingroom/led";
 String fanTopicSubscribe= "/tiot/group6/livingroom/fan";
@@ -115,6 +117,13 @@ void loop() {
     motionFlag=false;
   }
 
+  if(soundFlag == true)
+  {
+    String body=senMlEncode("sound", String(true), "boolean");
+    clientMqtt.publish(soundTopic.c_str(), body.c_str());
+    soundFlag=false;
+  }
+
   long now=millis();
   if((now- lastTimeTempRead) >= 10000)
   {
@@ -138,16 +147,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
 
   if (msgReceived["e"][0]["n"] == "led") 
   {
-    if (msgReceived["e"][0]["v"] == "on") 
-    {
-      digitalWrite(RLED, HIGH);
-      Serial.println("Led swithced ON");
-    }
-    if (msgReceived["e"][0]["v"] == "off") 
-    {
-      digitalWrite(RLED, LOW);
-      Serial.println("Led Switched OFF");
-    }
+    float val=msgReceived["e"][0]["v"];
+    brightness= map(val, 0, 100, 255, 0);//The LED is more bright as the value is lower
+    analogWrite(RLED, brightness);
   }
   else if(msgReceived["e"][0]["n"] == "fan")
   {
@@ -169,7 +171,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
 //Fuction for Catalog Registration
 void registerToCatalog()
 {
-  String body="{\"ID\":"+device_id+", \"room\":\"livingroom\"}";
+  String body="{\"ID\":\""+device_id+"\", \"room\":\"livingroom\"}";
   //Communicating with the Catalog
   clientHttp.beginRequest();
   clientHttp.post("/registration");
@@ -186,7 +188,7 @@ void registerToCatalog()
 //Function in a loop to send refresh the registration
 void refreshRegistration()
 {
-  String body="{\"ID\":"+device_id+", \"room\":\"livingroom\"}";
+  String body="{\"ID\":\""+device_id+"\", \"room\":\"livingroom\"}";
   clientHttp.beginRequest();
   clientHttp.put("/registration");
   clientHttp.sendHeader("Content-Type", "application/json");
@@ -237,8 +239,8 @@ void onPDMdata()
   {
     if(sampleBuffer[i] > sound_threshold)
     {
-      //Set the motion flag so that in the loop a message get published
-      motionFlag=true;
+      //Set the sound flag so that in the loop a message get published
+      soundFlag=true;
       break;
     }
   }
@@ -250,7 +252,6 @@ void printOnLCD(String text)
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print(text);
-  delay(5*1000);
 }
 
 String senMlEncode(String name, String value, String unit)
