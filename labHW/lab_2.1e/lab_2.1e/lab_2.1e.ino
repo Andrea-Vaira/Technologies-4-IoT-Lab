@@ -72,7 +72,7 @@ void setup() {
   digitalWrite(GLED, LOW);
   pinMode(TEMPPIN, INPUT);
   pinMode(FANPIN, OUTPUT);
-  //digitalWrite(FANPIN, potSpeed);
+  digitalWrite(FANPIN, potSpeed);
   setPoints(0, 1); //Set the thresholds for the case without any people
   attachInterrupt(digitalPinToInterrupt(PIRPIN), checkPresence, CHANGE);
 
@@ -96,7 +96,7 @@ void loop() {
   if(T >= minCond) //If T can start the FAN
   {
     potSpeed= map(T, minCond, maxCond, 0, 255); //With higher T the FAN rotate more rapidly
-    //analogWrite(FANPIN, potSpeed);
+    analogWrite(FANPIN, potSpeed);
   }
   else if(T >= minHeat && T <=maxHeat) //Low T, the LED is used to heat the room
   {
