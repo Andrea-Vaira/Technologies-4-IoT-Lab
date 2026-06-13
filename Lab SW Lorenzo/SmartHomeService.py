@@ -13,38 +13,38 @@ class SmartHomeService(object):
 
     def checkRoomPresence(self,room):
         if(room not in self.rooms.keys()):
-                raise cherrypy.HTTPError(404,"Room not found in the system, rooms available: " 
-                                        + ", ".join(room for room in self.rooms.keys()))
+                error = {
+                    "error" : "room not found",
+                    "available_rooms" : [room for room in self.rooms.keys()]
+                }
+                raise cherrypy.HTTPError(404,json.dumps(error))
 
     def checkSensorPresence(self,room,sensor):
         if(sensor not in self.rooms[room].getSensors().keys()):
-            raise cherrypy.HTTPError(400,"Sensor not found in the " + room + ", sensors available: " 
-                                        + ", ".join(sensor for sensor in self.rooms[room].getSensors().keys()))
+            error = {
+                    "error" : "unknown sensor type",
+                    "valid_types" : [sensor for sensor in self.rooms[room].getSensors().keys()]
+                }
+            raise cherrypy.HTTPError(400,json.dumps(error))
     
     def checkActuatorPresence(self,room,actuator):
         if(actuator not in self.rooms[room].getActuators().keys()):
-            raise cherrypy.HTTPError(400,"Actuator not found in the " + room + ", actuators available: " 
-                                        + ", ".join(actuator for actuator in self.rooms[room].getActuators().keys()))
+            error = {
+                    "error" : "unknown actuator type",
+                    "valid_types" : [actuator for actuator in self.rooms[room].getActuators().keys()]
+                }
+            raise cherrypy.HTTPError(400,json.dumps(error))
 
     def refreshService(self, id):
-        try:
-            self.catalog.refresh_service(id)
-            print(f"[INFO] Connection succeded for service {id}")
-            time.sleep(60)
-        except Exception as e:
-            print(f"[WARNING] Connection error for service {id}, retry in 60 seconds")
-            print("[INFO] Error: {e}")
-            time.sleep(60)
-        
-'''
-Info:
-    ID
-    Description
-    Rest endpoint URL
-    MQTT info(ip,port,topic)
-    Resources List
-    Timestamp
-'''
+        while(True):
+            try:
+                self.catalog.refresh_service(id)
+                print(f"[INFO] Connection succeded for service {id}")
+                time.sleep(60)
+            except Exception as e:
+                print(f"[WARNING] Connection error for service {id}, retry in 60 seconds")
+                print("[INFO] Error: {e}")
+                time.sleep(60)
 
 class SmartHomeSensorService(SmartHomeService):
     exposed = True
@@ -57,7 +57,7 @@ class SmartHomeSensorService(SmartHomeService):
             "rest" : "http://localhost:8080/sensor",
             "mqtt" : self.catalog.get_broker(),
             "resources" : "Boh",
-            "timestamp" : -1
+            "timestamp" : -1        #it will be assigned by the catalog
         }
         self.catalog.register_service(self.info)
         Thread(target=self.refreshService, args=(self.info["ID"],), daemon=True).start()
@@ -110,9 +110,9 @@ class SmartHomeSensorService(SmartHomeService):
         else:
             #no checks, create a list of events with resource name = room/sensor
             events = list()
-            for room in self.rooms.values():
+            for roomN,room in self.rooms.items():
                 for sensor in room.getSensors().values():
-                    resName = f'{room.getName()}/{sensor.getName()}'
+                    resName = f'{roomN}/{sensor.getName()}'
                     events.append(self.senmlEventFromRead(sensor,resName))
 
             #sml to return
@@ -155,6 +155,8 @@ class SmartHomeActuatorService(SmartHomeService):
             newState = request["e"][0]["v"]
             self.checkRoomPresence(room)
             self.checkActuatorPresence(room,actuatorName)
+            if(actuatorName == "thermostat" and newState > 30 or newState < 10):
+                raise cherrypy.HTTPError(400)
             self.rooms[room].getActuator(actuatorName).setState(newState)
             finalSml = {
                 'bn' : f'actuator/{room}/',

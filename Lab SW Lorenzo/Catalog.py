@@ -4,6 +4,16 @@ from Filemanager import *
 import time
 import cherrypy
 
+'''
+Info:
+    ID
+    Description
+    Rest endpoint URL
+    MQTT info(ip,port,topic)
+    Resources List
+    timestamp
+'''
+
 class Catalog(object):
     exposed=True
 

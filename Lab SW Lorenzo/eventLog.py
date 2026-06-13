@@ -38,27 +38,30 @@ class EventLog(object):
         
     def GET(self,*path,**query):
         room = query.get("room","")
-        since = query.get("since",0)
+        since = int(query.get("since",0))
+        type = query.get("type","")
+
         if(len(path) > 0):
             if(room != "" and room != path[0]):
                 raise cherrypy.HTTPError(403,"Arguments passed through path and query in conflict")
             else:
                 room = path[0]
+                
         res = []
         for log in self.logs.values():
             for event in log['e']:
-                if room in event['n'] and log['bt'] > since:
+                if room in event['n'] and log['bt'] > since and type in event["n"]:
                     res.append(event)
         return json.dumps(res).encode('utf-8')
     
     def DELETE(self,*path,**query):
-        epoch = query.get("since",None)
-        if(epoch == None):
+        epoch = int(query.get("before",-1))
+        if(epoch == -1):
             raise cherrypy.HTTPError(403,"Epoch in query is mandatory")
         pre = len(self.logs)
-        self.logs[:] = [x for x in self.logs if x['bt'] >= epoch]
+        self.logs = {id_log: log for id_log, log in self.logs.items() if log.get('bt', 0) >= epoch}
         post = len(self.logs)
-        return pre - post
+        return str(pre - post).encode()
     
                     
 
