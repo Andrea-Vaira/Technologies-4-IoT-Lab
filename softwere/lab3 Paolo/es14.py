@@ -25,9 +25,7 @@ class SmartHomeController(object):
 
         #Regitration over REST for the Catalog
         self.body={}
-        '''Necessario un modo per assegnare un ID senza passare dal Catalog Client per usare REST, Se facessimo
-        partire il conteggio degli id da 1 sul FileManager/Catalog, potremmo assegnare al Controllore s00000 direttamente.'''
-        self.body["ID"]= "s00000" 
+        self.body["ID"]= "Controller_s00000" 
         self.body["description"]="Service that controls the entire system"
         try:
             requests.post((catalog_url+"/registration"), json=self.body) #Registers to the catalog via REST using POST
