@@ -20,8 +20,8 @@ volatile int minHeat; //Temperature for Heating LED
 volatile int maxHeat;
 volatile int minCond; //temperature for Air Conditioning FAN
 volatile int maxCond;
-const int valHeat[]={15, 20, 10, 15};
-const int valCond[]={25, 30, 20, 25};
+volatile int valHeat[]={15, 20, 10, 15};
+volatile int valCond[]={25, 30, 20, 25};
 volatile int numPeoplePir=0;
 volatile int numPeopleMic=0;
 const int timeout_pir= 1000*60*2; //2 minutes
@@ -75,14 +75,23 @@ void loop() {
 
   if(T >= minCond) //If T can start the FAN
   {
-    potSpeed= map(T, minCond, maxCond, 0, 255); //With higher T the FAN rotate more rapidly
-    analogWrite(FANPIN, potSpeed);
+    potSpeed= constrain( map(T, minCond, maxCond, 0, 255), 0, 255); //With higher T the FAN rotate more rapidly
   }
-  else if(T >= minHeat && T <=maxHeat) //Low T, the LED is used to heat the room
+  else
   {
-    brightness= map(T, minHeat, maxHeat, 255, 0);//The LED is more bright as the temperature is lower
-    analogWrite(RLED, brightness);
+    potSpeed=0;
   }
+  analogWrite(FANPIN, potSpeed);
+  
+  if(T >= minHeat && T <=maxHeat) //Low T, the LED is used to heat the room
+  {
+    brightness= constrain( map(T, minHeat, maxHeat, 255, 0), 0, 255);//The LED is more bright as the temperature is lower
+  }
+  else
+  {
+    brightness=0;
+  }
+  analogWrite(RLED, brightness);
 
   long int now=millis();
   if((now-lastTimeReadPir)> timeout_pir)//Its passed too much time from the last person seen
@@ -90,7 +99,7 @@ void loop() {
     numPeoplePir=0;
   }
 
-  if((now-timeSoundEvents[lastPos]) >timeout_sound)//No people heard fo too much time
+  if((lastPos> -1) && ((now-timeSoundEvents[lastPos]) >timeout_sound))//No people heard for too much time
   {
     numPeopleMic=0;
   }
@@ -98,6 +107,10 @@ void loop() {
   if((numPeopleMic+ numPeoplePir) == 0) //No people present
   {
     setPoints(0, 1);
+  }
+  else
+  {
+    setPoints(2, 3);
   }
 
   if(Serial.available() > 0)
@@ -123,6 +136,23 @@ void setPointsFromSerial()
   float MAC= Serial.parseFloat();
   float mHeat= Serial.parseFloat();
   float MHeat= Serial.parseFloat();
+
+  if((numPeopleMic + numPeoplePir) == 0) 
+  {
+    valCond[0] = mAC;
+    valCond[1] = MAC;
+    valHeat[0] = mHeat;
+    valHeat[1] = MHeat;
+    Serial.println("Changed the set points for the EMPTY room");
+  } 
+  else 
+  {
+    valCond[2] = mAC;
+    valCond[3] = MAC;
+    valHeat[2] = mHeat;
+    valHeat[3] = MHeat;
+    Serial.println("Changed the set points for the OCCUPIED room");
+  }
 
   setPointsSerial(mAC, MAC, mHeat, MHeat);
 }
@@ -161,33 +191,36 @@ void onPDMdata()
     }
   }
 
-  if((timeSoundEvents[lastPos]- timeSoundEvents[firstPos]) <= sound_interval && numSounds >= n_sound_events)
+  if(numSounds >= n_sound_events)
   {
-    numPeopleMic++;
+    if((timeSoundEvents[lastPos]- timeSoundEvents[firstPos]) <= sound_interval)
+    {
+      numPeopleMic++;
+      setPoints(2, 3);
+    }
     numSounds--;
     firstPos= (firstPos+1)%n_sound_events; //Shift the index to the next sound heard
-    setPoints(2, 3);
   }
 }
 
 //In a loop, function to print on the LCD Display
 void printOnLcd()
 {
+  int fanPercent = map(potSpeed, 0, 255, 0, 100);
+  int heatPercent = map(brightness, 0, 255, 0, 100);
   int numPeople=numPeoplePir+ numPeopleMic;
+  lcd.setCursor(0,0);
   lcd.print("T: ");
   lcd.print(T);
   lcd.print("P:");
   lcd.print(numPeople);
   lcd.setCursor(0,1);
   lcd.print("AC: ");
-  lcd.print(potSpeed);
+  lcd.print(fanPercent);
   lcd.print(" HT: ");
-  lcd.print(brightness);
+  lcd.print(heatPercent);
   lcd.print(" ");
   delay(5*1000);
-  lcd.setCursor(1,0);
-  lcd.clear();
-  lcd.setCursor(0,0);
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print("AC m:");
@@ -200,9 +233,5 @@ void printOnLcd()
   lcd.print(" M:");
   lcd.print(maxHeat);
   delay(5*1000);
-  lcd.setCursor(1,0);
   lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.clear();
-  lcd.setCursor(0,0);
 }
