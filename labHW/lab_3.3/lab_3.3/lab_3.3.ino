@@ -4,7 +4,7 @@
 #include <PubSubClient.h>
 #define SECRET_SSID "XXXXX"
 #define SECRET_PASS "XXXXX"
-/*COMANDI:
+/*COMMANDS:
 
 .\mosquitto_pub -h broker.hivemq.com -t '/tiot/group6/led' -m '{\"bn\": \"PC\", \"e\": [{\"n\": \"led\", \"v\": 1}]}'
 .\mosquitto_pub -h broker.hivemq.com -t '/tiot/group6/led' -m '{\"bn\": \"PC\", \"e\": [{\"n\": \"led\", \"v\": 0}]}'
