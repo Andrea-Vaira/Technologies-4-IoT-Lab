@@ -3,6 +3,7 @@ import threading
 from Filemanager import *
 import time
 import cherrypy
+import json
 
 '''
 Info:
@@ -34,16 +35,17 @@ class Catalog(object):
             self.cat[id] = body.copy()
         
     def _cleanup_loop(self):
-        toDelete = list()
-        now = time.time()
-        for id,body in self.cat.items():
-            if(now - body["timestamp"] > 120):
-                toDelete.append(id) 
-        for id in toDelete:
-            self.cat.pop(id)
-            self.fm.delete(id)
+        while True:
+            toDelete = list()
+            now = time.time()
+            for id,body in self.cat.items():
+                if(now - body["timestamp"] > 120):
+                    toDelete.append(id) 
+            for id in toDelete:
+                self.cat.pop(id)
+                self.fm.delete(id)
 
-        time.sleep(60)
+            time.sleep(60)
 
     def getFileManager(self):
         return self.fm
@@ -91,16 +93,18 @@ class Catalog(object):
             print("Error")
 
     def getDeviceID(self):
-        id = f"d{self.fm.data["dID"]:06}"
-        self.fm.data["dID"] += 1
-        self.fm.save()
-        return id
+        with self.fm.lock:
+            id = f"d{self.fm.data['dID']:06}"
+            self.fm.data["dID"] += 1
+            self.fm.save()
+            return id
 
     def getServiceID(self):
-        id = f"s{self.fm.data['sID']:06}"
-        self.fm.data["sID"] += 1
-        self.fm.save()
-        return id
+        with self.fm.lock:
+            id = f"s{self.fm.data['sID']:06}"
+            self.fm.data["sID"] += 1
+            self.fm.save()
+            return id
 
 
 

@@ -40,14 +40,14 @@ class Room(object):
     def __init__(self,name):
         self.name = name
 
-    sensors = dict()
-    sensors["temperature"] = Sensor("temperature","Cel",(-10,40))
-    sensors["humidity"] = Sensor("humidity","%RH",(0,100))
-    sensors["motion"] = Sensor("motion","boolean",(0,1))
-    actuators = dict()
-    actuators["thermostat"] = Actuator("thermostat","cel",(10,30),20)
-    actuators["lights"] = Actuator("lights","boolean",(0,1),0)
-    actuators["blinds"] = Actuator("blinds","position %",(0,100),0)
+        sensors = dict()
+        sensors["temperature"] = Sensor("temperature","Cel",(-10,40))
+        sensors["humidity"] = Sensor("humidity","%RH",(0,100))
+        sensors["motion"] = Sensor("motion","boolean",(0,1))
+        actuators = dict()
+        actuators["thermostat"] = Actuator("thermostat","cel",(10,30),20)
+        actuators["lights"] = Actuator("lights","boolean",(0,1),0)
+        actuators["blinds"] = Actuator("blinds","position %",(0,100),0)
 
     def getName(self):
             return self.name

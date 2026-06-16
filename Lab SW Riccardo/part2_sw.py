@@ -5,6 +5,7 @@ import threading
 import time
 import json
 import cherrypy
+import requests
 
 DB_FILE = "catalog.json"
 
@@ -19,7 +20,7 @@ Info:
 '''
 
 class FileManager:
-    def init(self):
+    def __init__(self):
         self.lock = Lock()
         self.data = {"devices": {}, "services": {}, "broker": {"ip":"localhost","port":1883}, "sID" : 0, "dID" : 0}
         self.load()
@@ -70,30 +71,32 @@ class FileManager:
 class Catalog(object):
     exposed=True
 
-    def _init_(self):
-        threading.Thread(target=self._cleanup_loop, daemon=True).start()
-        self.fm= FileManager
+    def __init__(self):
+        
+        self.fm= FileManager()
         self.cat= dict()
         self.initializeCatalog()
+        threading.Thread(target=self._cleanup_loop, daemon=True).start()
 
     def initializeCatalog(self):
-        for device in self.fm.data["device"]:
+        for device in self.fm.data["devices"]:
             self.cat[device["ID"]] = device.copy()
 
-        for service in self.fm.data["service"]:
+        for service in self.fm.data["services"]:
             self.cat[service["ID"]] = service.copy()
         
     def _cleanup_loop(self):
-        toDelete = list()
-        now = time.time()
-        for id,body in self.cat.items():
-            if(now - body["timestamp"] > 120):
-                toDelete.append(id) 
-        for id in toDelete:
-            self.cat.pop(id)
-            self.fm.delete(id)
+        while True:
+            toDelete = list()
+            now = time.time()
+            for id,body in self.cat.items():
+                if(now - body["timestamp"] > 120):
+                    toDelete.append(id) 
+            for id in toDelete:
+                self.cat.pop(id)
+                self.fm.delete(id)
 
-        time.sleep(60)
+            time.sleep(60)
 
     def getFileManager(self):
         return self.fm
@@ -141,12 +144,12 @@ class Catalog(object):
             print("Error")
 
     def getDeviceID(self):
-        id = f"d{self.fm.data["dID"]:06}"
+        id = f"d{self.fm.data['dID']:06}"
         self.fm.data["dID"] += 1
         return id
 
     def getServiceID(self):
-        id = f"d{self.fm.data['sID']:06}"
+        id = f"s{self.fm.data['sID']:06}"
         self.fm.data["sID"] += 1
         return id
 
@@ -155,7 +158,7 @@ class Catalog(object):
 class CatalogClient(object):
     exposed=True
 
-    def init(self):
+    def __init__(self):
         self.catalog= Catalog
         self.fm=self.catalog.getFileManager()
 

@@ -20,6 +20,7 @@ if __name__ == '__main__':
  actuatorService = SmartHomeActuatorService(myHome)
  cherrypy.tree.mount(sensorService, '/sensor', conf)
  cherrypy.tree.mount(actuatorService, '/actuator', conf)
+ cherrypy.tree.mount(catalog.catalog,'/catalog',conf)
  cherrypy.tree.mount(eventLog,'/log',conf)
  cherrypy.config.update({'server.socket_port': 8080})
  cherrypy.config.update({'server.socket_host': '127.0.0.1'})
