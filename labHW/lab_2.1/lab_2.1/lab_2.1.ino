@@ -41,7 +41,8 @@ void setup() {
   Serial.begin(9600);
   while(!Serial);
   Serial.println("Exercise Lab 2: Local Smart Home");
-  Serial.println("To set the thresholds for temperatures write them as:  minAC maxAC minHeat maxHeat (one after the other only with one space)");
+  Serial.println("To set thresholds, start with 'E' (Empty) or 'O' (Occupied), followed by values:");
+  Serial.println("Format: E minAC maxAC minHeat maxHeat  OR  O minAC maxAC minHeat maxHeat");
   //Setup of LCD Display
   lcd.begin(16, 2);
   lcd.setBacklight(255);
@@ -131,30 +132,56 @@ void setPoints(int min, int max)
 
 void setPointsFromSerial()
 {
+  //Read the character for the mode of the room
+  char mode= Serial.read();
+  while(mode == ' ' || mode == '\n' || mode == '\r') 
+  {
+    if(Serial.available() > 0)
+    {
+      mode = Serial.read();
+    } 
+    else 
+    {
+      return;
+    }
+  }
+
   //Read the values from the Serial Port all together
   float mAC= Serial.parseFloat();
   float MAC= Serial.parseFloat();
   float mHeat= Serial.parseFloat();
   float MHeat= Serial.parseFloat();
 
-  if((numPeopleMic + numPeoplePir) == 0) 
+  if(mode == 'E' || mode== 'e') //room without people 
   {
     valCond[0] = mAC;
     valCond[1] = MAC;
     valHeat[0] = mHeat;
     valHeat[1] = MHeat;
     Serial.println("Changed the set points for the EMPTY room");
+
+    if((numPeopleMic + numPeoplePir) == 0) 
+    {
+      setPointsSerial(mAC, MAC, mHeat, MHeat);
+    }
   } 
-  else 
+  else if(mode == 'O' || mode == 'o') //room with people
   {
     valCond[2] = mAC;
     valCond[3] = MAC;
     valHeat[2] = mHeat;
     valHeat[3] = MHeat;
     Serial.println("Changed the set points for the OCCUPIED room");
-  }
 
-  setPointsSerial(mAC, MAC, mHeat, MHeat);
+    if((numPeopleMic + numPeoplePir) > 0) 
+    {
+      setPointsSerial(mAC, MAC, mHeat, MHeat);
+    }
+  }
+  else
+  {
+    Serial.println("Error, the mode of the room can only be E for Empty and O for Occupied");  
+  }
 }
 
 void setPointsSerial(float mAC, float MAC, float mHeat, float MHeat)
