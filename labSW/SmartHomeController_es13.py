@@ -14,7 +14,7 @@ class SmartHomeController(object):
     exposed=True
 
     def __init__(self):
-        self.roomsReadings={} #List with the 10 last readings
+        self.roomsReadings={} #List with the 10 last readings for each room
         self.num=0
         self.roomStatistics={}
         self.motionStatus=False
