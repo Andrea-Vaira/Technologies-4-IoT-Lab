@@ -58,10 +58,15 @@ class Catalog(object):
     def POST(self, *path, **query):
         body= cherrypy.request.body.read().decode('utf-8')
         bodyDict= json.loads(body.strip())
-        if(bodyDict["ID"] not in self.cat.keys()):
+        id = bodyDict.get("ID")
+        if not id:
+            raise cherrypy.HTTPError(400, "Missing ID in JSON body")
+
+        if id not in self.cat.keys():
             self.add(bodyDict)                      
         else:
             print("Item already in the catalog")
+        return json.dumps({"status": "success"}).encode('utf-8')
 
     def PUT(self, *path, **query):
         body= cherrypy.request.body.read().decode('utf-8')

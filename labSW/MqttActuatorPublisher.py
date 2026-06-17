@@ -5,7 +5,7 @@ import threading
 import requests
 import paho.mqtt.client as mqtt
 
-CATALOG_URL = "http://localhost:8080/"
+CATALOG_URL = "http://localhost:8080/catalog"
 SERVICE_ID = "s000002"
 
 class MqttActuatorPublisher:

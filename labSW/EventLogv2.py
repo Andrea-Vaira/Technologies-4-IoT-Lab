@@ -40,7 +40,7 @@ class EventLogv2(object):
             sensor_data = json.loads(payload)
             
             #SenML is expected so we can just append
-            self.postEvent(self, sensor_data)
+            self.postEvent(sensor_data)
             print("MQTT Recived")
         except Exception as e:
             print(f"MQTT Error: {e}")
@@ -78,18 +78,17 @@ class EventLogv2(object):
 
     def DELETE(self, *path, **query):
         if(len(path) == 0 and  "before" in query.keys()):
-            time=float(query["before"])
-            indice=0
+            time_limit=float(query["before"])
             count=0
             newList=list()
             for e in self.events:
-                if(e["t"]< time):
-                    indice +=1
-                    count+=1
+                event_time = e.get("t", e.get("bt", 0))
+                if event_time < time_limit:
+                    count += 1
                 else:
                     newList.append(e)
             self.events=newList
-            return count
+            return str(count).encode('utf-8')
         return "0".encode('utf-8')
                
 if __name__ == '__main__':

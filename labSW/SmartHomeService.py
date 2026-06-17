@@ -56,7 +56,7 @@ class SmartHomeSensorService(SmartHomeService):
             "description" : "Service that manages the sensor system",
             "rest" : "http://localhost:8080/sensor",
             "mqtt" : self.catalog.get_broker(),
-            "resources" : "Boh",
+            "resources" : "",
             "timestamp" : -1        #it will be assigned by the catalog
         }
         self.catalog.register_service(self.info)
@@ -150,12 +150,14 @@ class SmartHomeActuatorService(SmartHomeService):
     def PUT(self,*path,**query):
         try: 
             request = json.loads(cherrypy.request.body.read())
-            room = request["bn"].split("/")[1]
+            # to use both bn : kitchen and bn : actuator/kitchen/
+            bn_parts = [p for p in request["bn"].split("/") if p]
+            room = bn_parts[1] if len(bn_parts) > 1 else bn_parts[0]
             actuatorName = request["e"][0]["n"]
             newState = request["e"][0]["v"]
             self.checkRoomPresence(room)
             self.checkActuatorPresence(room,actuatorName)
-            if(actuatorName == "thermostat" and newState > 30 or newState < 10):
+            if(actuatorName == "thermostat" and (newState > 30 or newState < 10)):
                 raise cherrypy.HTTPError(400)
             self.rooms[room].getActuator(actuatorName).setState(newState)
             finalSml = {

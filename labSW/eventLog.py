@@ -1,6 +1,7 @@
 #Software Laboratory Part 1, Exercise 4
 import cherrypy
 import json
+import time
 
 class EventLog(object):
     exposed = True
@@ -10,18 +11,24 @@ class EventLog(object):
         self.logID = 0
     
     def add(self,sml):
-        baseName = sml['bn']
+        baseName = sml.get('bn', '')
         newEvents = []
+
+        baseTime = sml.get('bt')
+        if not baseTime:
+            baseTime = time.time()
         
-        for event in sml['e']:
+        for event in sml.get('e', []):
             newEvent = event.copy()
-            newEvent['n'] = baseName + event['n']
+            newEvent['n'] = baseName + event.get('n', '')
+            if 't' not in newEvent:
+                newEvent['t'] = baseTime
             newEvents.append(newEvent)
 
         finalSml = {
-                'bt' : sml['bt'],
-                'e' : newEvents
-            }
+            'bt' : baseTime,
+            'e' : newEvents
+        }
         
         self.logs[self.logID] = finalSml
         self.logID += 1
@@ -32,13 +39,13 @@ class EventLog(object):
         try:
             sml = json.loads(cherrypy.request.body.read())
             self.add(sml)
-            return sml
+            return json.dumps(sml).encode('utf-8')
         except ValueError:
             raise cherrypy.HTTPError(422,"Unprocessable entity: SenML body is malformed")
         
     def GET(self,*path,**query):
         room = query.get("room","")
-        since = int(query.get("since",0))
+        since = float(query.get("since", 0))
         type = query.get("type","")
 
         if(len(path) > 0):
@@ -51,11 +58,14 @@ class EventLog(object):
         for log in self.logs.values():
             for event in log['e']:
                 if room in event['n'] and log['bt'] > since and type in event["n"]:
-                    res.append(event)
+                    #adding t
+                    event_2 = event.copy()
+                    event_2['t'] = log['bt']
+                    res.append(event_2)
         return json.dumps(res).encode('utf-8')
     
     def DELETE(self,*path,**query):
-        epoch = int(query.get("before",-1))
+        epoch = float(query.get("before",-1))
         if(epoch == -1):
             raise cherrypy.HTTPError(403,"Epoch in query is mandatory")
         pre = len(self.logs)

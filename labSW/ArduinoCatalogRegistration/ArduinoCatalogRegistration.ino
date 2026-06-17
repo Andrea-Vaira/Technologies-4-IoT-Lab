@@ -5,14 +5,7 @@
 #include <PubSubClient.h>
 #define SECRET_SSID "XXXXX"
 #define SECRET_PASS "XXXXX"
-/*COMANDI:
 
-.\mosquitto_pub -h broker.hivemq.com -t '/tiot/group6/led' -m '{\"bn\": \"PC\", \"e\": [{\"n\": \"led\", \"v\": 1}]}'
-.\mosquitto_pub -h broker.hivemq.com -t '/tiot/group6/led' -m '{\"bn\": \"PC\", \"e\": [{\"n\": \"led\", \"v\": 0}]}'
-.\mosquitto_sub -h broker.hivemq.com -t '/tiot/group6/temperature'
-
-
-*/
 
 const char catalog_host[] = "192.168.1.XXX"; 
 const int catalog_port = 8080;

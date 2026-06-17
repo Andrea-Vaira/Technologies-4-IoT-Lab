@@ -6,11 +6,6 @@ import random
 import requests  
 import paho.mqtt.client as mqtt
 
-'''
-COMANDI:
-
-
-'''
 
 URL = "http://localhost:8080/"
 
@@ -44,13 +39,14 @@ class DeviceMQTTClient:
             response = requests.get(URL)
             response.raise_for_status()
             catalog = response.json()
-            broker = catalog.get("brocker",{})
+            broker = catalog.get("broker",{})
             return broker.get("ip","localhost"),broker.get("port",1883)
         except Exception as e:
             print(f"Connection error: {e} using standard data")
             return "localhost",1883
 
     def register_to_catalog(self):
+    
         payload = {
             "ID": self.device_id,
             "Description": "MQTT Temperature Publisher Node",
