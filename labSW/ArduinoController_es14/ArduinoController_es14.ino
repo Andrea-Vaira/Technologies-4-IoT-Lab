@@ -1,4 +1,4 @@
-//Exercise Lab 2e : Local Smart Home Modified for Exercise 14 Software Labs
+//Exercise Lab 2: Local Smart Home Modified for Exercise 14 Software Labs
 #include <LiquidCrystal_PCF8574.h>
 #include <Scheduler.h>
 #include <MBED_RPi_Pico_TimerInterrupt.h>

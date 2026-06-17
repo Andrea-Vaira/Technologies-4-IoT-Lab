@@ -1,3 +1,4 @@
+#Software Laboratory Part 3, Exercise 11
 import time
 import json
 import threading
@@ -130,18 +131,6 @@ class MqttActuatorPublisher:
                 print(f"Unable to connect to broker: {e}")
                 
             self.menu()
-
-
-
-
-
-
-
-
-
-
-
-
 
 if __name__ == "__main__":
     publisher = MqttActuatorPublisher()

@@ -1,3 +1,4 @@
+//Software Laboratory part 3, Exercise 10
 #include <WiFiNINA.h>
 #include <ArduinoHttpClient.h>
 #include <ArduinoJson.h>

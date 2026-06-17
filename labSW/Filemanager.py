@@ -1,4 +1,4 @@
-#Class of Software Laboratory Part 2
+#Software Laboratpry Part 2, Exercise 5
 import os
 from threading import Lock
 import json

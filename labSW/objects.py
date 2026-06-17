@@ -1,4 +1,4 @@
-#Class of Software Laboratory Part 1
+#Software Laboratory Part 1, Classes for exercise from 1 to 4
 import random
 
 class Sensor(object):
@@ -64,4 +64,3 @@ class Room(object):
     def getActuator(self,name):
         return self.actuators[name]
     
-

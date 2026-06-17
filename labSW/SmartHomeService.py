@@ -1,4 +1,4 @@
-#Class of Software Laboratory Part 1
+#Software Laboratory Part 1, Classes for exercise from 1 to 3
 import json
 import time
 import cherrypy
@@ -193,5 +193,3 @@ class SmartHomeActuatorService(SmartHomeService):
         sml["u"] = actuator.getUnit()
         sml["v"] = actuator.getState()
         return sml
-
-

@@ -1,4 +1,4 @@
-#Class of Software Laboratory Part 1
+#Software Laboratory Part 1, Exercise 4
 import cherrypy
 import json
 

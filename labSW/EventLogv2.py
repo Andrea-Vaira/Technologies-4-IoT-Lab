@@ -1,4 +1,4 @@
-import time
+#Software Laboratory Part 3, Exercise 12
 import json
 import cherrypy
 import paho.mqtt.client as mqtt
@@ -44,9 +44,6 @@ class EventLogv2(object):
             print("MQTT Recived")
         except Exception as e:
             print(f"MQTT Error: {e}")
-
-
-
 
     def GET(self, *path, **query):
         match len(path):
@@ -95,7 +92,6 @@ class EventLogv2(object):
             return count
         return "0".encode('utf-8')
                
-
 if __name__ == '__main__':
     conf = {
         '/': {'request.dispatch': cherrypy.dispatch.MethodDispatcher(),

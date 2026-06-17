@@ -1,7 +1,7 @@
 import cherrypy
 from SmartHomeService import *
 from SmartHome import *
-from eventLog import *
+from EventLog import *
 from Catalog import *
 if __name__ == '__main__':
  conf = {

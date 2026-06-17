@@ -1,4 +1,4 @@
-#Class of Software Laboratory Part 2
+#Software Laboratory Part 2, Exercise 5 and 6
 import threading
 from Filemanager import *
 import time
@@ -105,8 +105,6 @@ class Catalog(object):
             self.fm.data["sID"] += 1
             self.fm.save()
             return id
-
-
 
 class CatalogClient(object):
     exposed=True

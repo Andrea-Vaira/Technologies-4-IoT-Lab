@@ -1,4 +1,4 @@
-#Class of Software Laboratory Part 1
+#Software Laboratory Part 1, Class for exercise from 1 to 4
 from objects import *
 
 class SmartHome(object):

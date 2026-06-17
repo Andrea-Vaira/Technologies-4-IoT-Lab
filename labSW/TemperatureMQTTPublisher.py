@@ -1,11 +1,10 @@
+#Software Laboratory Part 2, Exercise 9
 import threading
 import time
 import json
 import random
 import requests  
 import paho.mqtt.client as mqtt
-
-
 
 '''
 COMANDI:
@@ -110,9 +109,7 @@ class DeviceMQTTClient:
             payload_json = json.dumps(payload)
             self.client.publish(self.topic_publish,payload_json)
             print("MQTT publish")
-            time.sleep(self.publish_interval)
-
-    
+            time.sleep(self.publish_interval)   
 
 if __name__ == "__main__":
     sensor_node = DeviceMQTTClient(device_id="d000001")

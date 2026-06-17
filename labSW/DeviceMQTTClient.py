@@ -1,11 +1,10 @@
+#Software Laboratory Part 2, Exercise 8
 import threading
 import time
 import json
 import random
 import requests  
 import paho.mqtt.client as mqtt
-
-
 
 '''
 COMANDI:
@@ -111,8 +110,6 @@ class DeviceMQTTClient:
             self.sID += 1
         return device_data
     
-
-
 if __name__ == '__main__':
     simulator = DeviceMQTTClient()
     simulator.start()
