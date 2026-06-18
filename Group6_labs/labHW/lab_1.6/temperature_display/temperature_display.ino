@@ -1,4 +1,4 @@
-//Exercise 6 Lab 1 Tmperature Sensor with LCD Display
+//Exercise 6 Lab 1 Temperature Sensor with LCD Display
 #include <LiquidCrystal_PCF8574.h>
 int RLED= 2; 
 int YLED= 3;

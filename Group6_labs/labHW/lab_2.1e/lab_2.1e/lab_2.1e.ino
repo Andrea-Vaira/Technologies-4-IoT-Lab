@@ -1,4 +1,4 @@
-//Exercise Lab 2 : Local Smart Home
+//Exercise Lab 2 : Local Smart Home Bonus Point
 #include <LiquidCrystal_PCF8574.h>
 #include <Scheduler.h>
 #include <MBED_RPi_Pico_TimerInterrupt.h>
