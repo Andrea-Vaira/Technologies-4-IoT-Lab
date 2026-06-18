@@ -1,17 +1,5 @@
 {
-    "devices": {
-        "arduino_d001": {
-            "ID": "arduino_d001",
-            "Description": "Arduino Sensor & Actuator Node",
-            "MQTT_topic_pub": "/tiot/group6/temperature",
-            "MQTT_topic_sub": "/tiot/group6/led",
-            "Resources": [
-                "temperature",
-                "led"
-            ],
-            "timestamp": 1781778563.0934181
-        }
-    },
+    "devices": {},
     "services": {
         "s000000": {
             "ID": "s000000",
@@ -22,7 +10,7 @@
                 "port": 1883
             },
             "resources": "",
-            "timestamp": 1781778572.8124394
+            "timestamp": 1781795001.3780415
         },
         "s000001": {
             "ID": "s000001",
@@ -33,24 +21,12 @@
                 "port": 1883
             },
             "resources": "Boh",
-            "timestamp": 1781778572.8284762
-        },
-        "s000002": {
-            "ID": "s000002",
-            "description": "Interactive MQTT Actuator Command Publisher",
-            "endpoints": [
-                "MQTT"
-            ],
-            "resources": [
-                "thermostat",
-                "arduino_led"
-            ],
-            "timestamp": 1781778539.6755793
+            "timestamp": 1781795001.395863
         },
         "Controller_s00000": {
             "ID": "Controller_s00000",
             "description": "Service that controls the entire system",
-            "timestamp": 1781778568.7341104
+            "timestamp": 1781794975.184992
         }
     },
     "broker": {
