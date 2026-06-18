@@ -6,15 +6,6 @@ import random
 import requests  
 import paho.mqtt.client as mqtt
 
-'''
-COMANDI:
-
-
-python '.\softwere\lab3 Paolo\es7.py'
-python '.\softwere\lab3 Paolo\es8.py'
-
-
-'''
 
 URL = "http://localhost:8080/"
 

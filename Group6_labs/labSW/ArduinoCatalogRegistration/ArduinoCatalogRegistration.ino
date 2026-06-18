@@ -3,87 +3,78 @@
 #include <ArduinoHttpClient.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
-#define SECRET_SSID "XXXXX"
-#define SECRET_PASS "XXXXX"
-/*COMANDI:
+#define SECRET_SSID "XXXXXX"
+#define SECRET_PASS "XXXXXX"
 
-.\mosquitto_pub -h broker.hivemq.com -t '/tiot/group6/led' -m '{\"bn\": \"PC\", \"e\": [{\"n\": \"led\", \"v\": 1}]}'
-.\mosquitto_pub -h broker.hivemq.com -t '/tiot/group6/led' -m '{\"bn\": \"PC\", \"e\": [{\"n\": \"led\", \"v\": 0}]}'
-.\mosquitto_sub -h broker.hivemq.com -t '/tiot/group6/temperature'
-
-
-*/
-
-const char catalog_host[] = "192.168.1.XXX"; 
+const char catalog_host[] = "172.22.198.XXX";
 const int catalog_port = 8080;
 
 void callback(char* topic, byte* payload, unsigned int length);
 
-String broker_address = "";
+String broker_address = "broker.hivemq.com";
 int broker_port = 1883;
-const String base_topic = "/tiot/group6"; 
 
 const String device_id = "arduino_d001";
 const String topic_pub = "/tiot/group6/temperature";
 const String topic_sub = "/tiot/group6/led";
 
-
 const int pinLed = 3;
 const int pinTemperature = A0;
 
 unsigned long lastPublishTime = 0;
-const long interval = 10000; // 10 seconds
+const long interval = 10000;
 
-const int B = 4275; 
+const int B = 4275;
 const long R0 = 100000;
 const float T0 = 298.15;
 
 unsigned long lastRenewTime = 0;
-const long renewInterval = 60000; // 60 seconds
+const long renewInterval = 60000;
 
-const int capacity = JSON_OBJECT_SIZE(2) + JSON_ARRAY_SIZE(1) + JSON_OBJECT_SIZE(4) + 100;
-DynamicJsonDocument doc_snd(capacity);
-DynamicJsonDocument doc_rec(capacity);
+DynamicJsonDocument doc_snd(512);
+DynamicJsonDocument doc_rec(512);
+WiFiClient mqttWifi;
+PubSubClient mqttClient(mqttWifi);
 
-WiFiClient wifi;
-HttpClient httpClient = HttpClient(wifi, catalog_host, catalog_port);
-// Callback forward declaration
-void callback(char* topic, byte* payload, unsigned int length);
-PubSubClient client(wifi);
-
-char ssid[] = SECRET_SSID ;
+char ssid[] = SECRET_SSID;
 char password[] = SECRET_PASS;
 
+const int pinPIR = 7;
+const long TIMEOUT_PIR = 2 * 60 * 1000; // 2 minuti in ms
+unsigned long lastMotionTime = 0;
+bool presenceActive = false;
+const String topic_motion = "/tiot/group6/motion";
 
-void getBrokerInfo(){
-  Serial.println("Connecting to the catalog");
-  httpClient.get("/");
+void getBrokerInfo() {
+  Serial.println("Connecting to the catalog...");
+  
+  WiFiClient httpWifi;
+  HttpClient httpClient(httpWifi, catalog_host, catalog_port);
+
+  httpClient.get("/catalog");
   int statusCode = httpClient.responseStatusCode();
   String response = httpClient.responseBody();
-  if (statusCode >= 200 && statusCode < 300){
-    DynamicJsonDocument doc(capacity);
+  httpClient.stop(); 
+
+  if (statusCode >= 200 && statusCode < 300) {
+    DynamicJsonDocument doc(512);
     deserializeJson(doc, response);
-    //IP extraction with fallback
-    broker_address = doc["broker"]["ip"] | "test.mosquitto.org";
+    String ip = doc["broker"]["ip"] | "broker.hivemq.com";
     broker_port = doc["broker"]["port"] | 1883;
-
-    //make sure PC and Arduino have the same address
-    if (broker_address == "localhost" || broker_address == "127.0.0.1") {
-      broker_address = catalog_host; 
+    if (ip == "localhost" || ip == "127.0.0.1") {
+      broker_address = String(catalog_host);
+    } else {
+      broker_address = ip;
     }
-    Serial.print("Rest connection established");
-
-
+    Serial.println("Broker from catalog: " + broker_address);
+  } else {
+    Serial.println("Catalog error, status: " + String(statusCode) + ", using default broker");
+    broker_address = "broker.hivemq.com";
   }
-  else{
-    Serial.print("Connection Error, default values applied");
-    broker_address = "test.mosquitto.org";
-  }
-
 }
 
 String createRegistrationPayload() {
-  DynamicJsonDocument doc(JSON_OBJECT_SIZE(2) + JSON_ARRAY_SIZE(1) + JSON_OBJECT_SIZE(4) + 100);
+  DynamicJsonDocument doc(256);
   doc["ID"] = device_id;
   doc["Description"] = "Arduino Sensor & Actuator Node";
   doc["MQTT_topic_pub"] = topic_pub;
@@ -91,18 +82,20 @@ String createRegistrationPayload() {
   JsonArray resources = doc.createNestedArray("Resources");
   resources.add("temperature");
   resources.add("led");
-  
   String output;
   serializeJson(doc, output);
   return output;
 }
 
 void registerToCatalog() {
-  Serial.println("Rest cayalog registartion");
+  Serial.println("Registering to catalog...");
+
+  WiFiClient httpWifi;
+  HttpClient httpClient(httpWifi, catalog_host, catalog_port);
+
   String payload = createRegistrationPayload();
-  
   httpClient.beginRequest();
-  httpClient.post("/");
+  httpClient.post("/catalog");
   httpClient.sendHeader("Content-Type", "application/json");
   httpClient.sendHeader("Content-Length", payload.length());
   httpClient.beginBody();
@@ -110,15 +103,19 @@ void registerToCatalog() {
   httpClient.endRequest();
 
   int statusCode = httpClient.responseStatusCode();
-  Serial.println("Rest registartion completed. Status: " + String(statusCode));
+  String body = httpClient.responseBody(); 
+  httpClient.stop();
+  Serial.println("Registration status: " + String(statusCode));
 }
 
 void renewRegistration() {
-  Serial.println("Keep-Alive");
+  Serial.println("Keep-Alive...");
+  WiFiClient httpWifi;
+  HttpClient httpClient(httpWifi, catalog_host, catalog_port);
+
   String payload = createRegistrationPayload();
-  
   httpClient.beginRequest();
-  httpClient.put("/");
+  httpClient.put("/catalog");
   httpClient.sendHeader("Content-Type", "application/json");
   httpClient.sendHeader("Content-Length", payload.length());
   httpClient.beginBody();
@@ -126,7 +123,9 @@ void renewRegistration() {
   httpClient.endRequest();
 
   int statusCode = httpClient.responseStatusCode();
-  Serial.println("Renewed. Status: " + String(statusCode));
+  String body = httpClient.responseBody(); 
+  httpClient.stop();
+  Serial.println("Renew status: " + String(statusCode));
 }
 
 
@@ -134,40 +133,64 @@ void setup() {
   Serial.begin(9600);
   pinMode(pinLed, OUTPUT);
   pinMode(pinTemperature, INPUT);
+  pinMode(pinPIR, INPUT);
 
-  Serial.print("Connecting to: ");
+  Serial.print("Connecting to WiFi: ");
   Serial.println(ssid);
   while (WiFi.begin(ssid, password) != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nWiFi connected!");
+  Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
+
+  delay(50); 
 
   getBrokerInfo();
+
+  delay(50); 
+
   registerToCatalog();
   lastRenewTime = millis();
 
-  client.setServer(broker_address.c_str(), broker_port);
-  client.setCallback(callback);
+  mqttClient.setServer(broker_address.c_str(), broker_port);
+  mqttClient.setCallback(callback);
 }
 
 void loop() {
-  if (client.state() != MQTT_CONNECTED) {
+  if (!mqttClient.connected()) {
     reconnect();
   }
-  client.loop();
-  unsigned long currentMillis = millis();
-  if (currentMillis - lastPublishTime >= interval) {
-    lastPublishTime = currentMillis;
+  mqttClient.loop();
 
+  unsigned long now = millis();
 
+  if (now - lastPublishTime >= interval) {
+    lastPublishTime = now;
     String body = senMlEncode("temperature", readTemperature(), "Cel");
-    client.publish(topic_pub.c_str(), body.c_str());
-    
+    mqttClient.publish(topic_pub.c_str(), body.c_str());
+    Serial.println("Published temperature");
   }
 
-  if (currentMillis - lastRenewTime >= renewInterval) {
-    lastRenewTime = currentMillis;
+  int pirVal = digitalRead(pinPIR);
+  if (pirVal == HIGH) {
+    lastMotionTime = now;
+    if (!presenceActive) {
+        presenceActive = true;
+        String body = senMlEncode("motion", (float)pirVal, "boolean");
+        mqttClient.publish(topic_motion.c_str(), body.c_str());
+        Serial.println("Motion detected - published TRUE");
+    }
+  }
+
+  if (presenceActive && (now - lastMotionTime) > TIMEOUT_PIR) {
+    presenceActive = false;
+    String body = senMlEncode("motion", (float)pirVal, "boolean");
+    mqttClient.publish(topic_motion.c_str(), body.c_str());
+    Serial.println("Presence timeout - published FALSE");
+  }
+
+  if (now - lastRenewTime >= renewInterval) {
+    lastRenewTime = now;
     renewRegistration();
   }
 }
@@ -175,18 +198,17 @@ void loop() {
 void callback(char* topic, byte* payload, unsigned int length) {
   DeserializationError err = deserializeJson(doc_rec, payload, length);
   if (err) {
-    Serial.print(F("deserializeJson() failed with code "));
-    Serial.println(err.c_str());
+    Serial.println("JSON parse error: " + String(err.c_str()));
     return;
   }
   if (doc_rec["e"][0]["n"] == "led") {
-    if (doc_rec["e"][0]["v"] == 1) {
+    int val = doc_rec["e"][0]["v"];
+    if (val == 1) {
       digitalWrite(pinLed, HIGH);
-      Serial.println("led ON");
-    }
-    if (doc_rec["e"][0]["v"] == 0) {
+      Serial.println("LED ON");
+    } else {
       digitalWrite(pinLed, LOW);
-      Serial.println("led OFF");
+      Serial.println("LED OFF");
     }
   }
 }
@@ -204,15 +226,17 @@ String senMlEncode(String res, float v, String unit) {
 }
 
 void reconnect() {
-  while (client.state() != MQTT_CONNECTED) {
-    if (client.connect(device_id.c_str())) {
-      Serial.println("connected");
-      client.subscribe(topic_sub.c_str());
+  int attempts = 0;
+  while (!mqttClient.connected() && attempts < 5) {
+    Serial.print("Connecting to MQTT broker " + broker_address + "...");
+    if (mqttClient.connect(device_id.c_str())) {
+      Serial.println(" connected!");
+      mqttClient.subscribe(topic_sub.c_str());
+      mqttClient.subscribe(topic_motion.c_str());
     } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
+      Serial.println(" failed rc=" + String(mqttClient.state()) + ", retry in 5s");
       delay(5000);
+      attempts++;
     }
   }
 }
