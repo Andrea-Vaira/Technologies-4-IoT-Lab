@@ -6,9 +6,10 @@ import requests
 import cherrypy
 import paho.mqtt.client as mqtt
 
-catalog_url= "http://xx.xx.xx.xx:9090" #To be defined
+catalog_url = "http://localhost:8080/catalog"
 
-alert_threshold= 30 #Maximum temperature also used in the Arduino Lab 2.1
+ALERT_THRESHOLD= 30 #Maximum temperature also used in the Arduino Lab 2.1
+TIMEOUT_PIR = 2 * 60
 
 class SmartHomeController(object):
     exposed=True
@@ -21,11 +22,13 @@ class SmartHomeController(object):
         self.configurable_threshold=26
 
         #Regitration over REST for the Catalog
-        self.body={}
-        self.body["ID"]= "Controller_s00000" 
-        self.body["description"]="Service that controls the entire system"
+        self.body = {
+            "ID": "Controller_s00000",
+            "description": "Service that controls the entire system"
+        }
+
         try:
-            requests.post((catalog_url+"/registration"), json=self.body) #Registers to the catalog via REST using POST
+            requests.post(catalog_url, json=self.body) #Registers to the catalog via REST using POST
         except Exception as e:
             print("Error, Not Registred in the Catalog")
         threading.Thread(target=self.refreshRegistration_loop, daemon=True).start()
@@ -33,11 +36,11 @@ class SmartHomeController(object):
         #Management with MQTT of Arduino's actuators and sensors
         self.broker = "broker.hivemq.com" 
         self.port = 1883
-        self.tempTopic="/tiot/group6/+/temperature"
-        self.ledTopic="/tiot/group6/{}/led"
-        self.motionTopic= "/tiot/group6/+/motion"
+        self.tempTopic = "/tiot/group6/temperature"
+        self.ledTopic = "/tiot/group6/led"
+        self.motionTopic = "/tiot/group6/motion"
         self.alertTopic="/tiot/group6/alert"
-        self.mqtt_client = mqtt.Client(client_id="SmartHomeEventController")
+        self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id="SmartHomeEventController")
         self.mqtt_client.on_connect = self.on_connect
         self.mqtt_client.on_message = self.on_message
 
@@ -51,14 +54,25 @@ class SmartHomeController(object):
     def PUT(self, *path, **query): #REST method to update the configurable threshold
         body= cherrypy.request.body.read()
         bodyDict=json.loads(body)
-        self.configurable_threshold= bodyDict["v"] #The threshold must be sent in an SenML
-        return
+        self.configurable_threshold = bodyDict["e"][0]["v"] #The threshold must be sent in an SenML
+        print(f"Threshold updated to {self.configurable_threshold}°C")
+        return json.dumps({"threshold": self.configurable_threshold}).encode()
+
+
+    def GET(self, *path, **query):
+        return json.dumps({
+            "rooms": self.roomsReadings,
+            "statistics": self.roomStatistics,
+            "threshold": self.configurable_threshold
+        }, default=str).encode()
+ 
+
 
     def refreshRegistration_loop(self):
         while(True):
             time.sleep(60) #Every 60 seconds sends an update for the registration on the catalog
             try:
-                requests.put(catalog_url+"/registration", json=self.body)
+                requests.put(catalog_url, json=self.body)
                 self.time=time.time()
             except Exception as e:
                 print("Error in Refreshing the catalog registration")
@@ -77,30 +91,46 @@ class SmartHomeController(object):
         try:
             payload = msg.payload.decode('utf-8')
             sensor_data = json.loads(payload)
+            room = sensor_data["bn"]
 
-            if sensor_data["bn"] not in self.roomsReadings.keys():
-                    self.roomsReadings[sensor_data["bn"]]={"temperatures":list(), "motionStatus":False}
-                    self.roomStatistics[sensor_data["bn"]]={"min":0, "max":0, "avg":0}
-            
+            if room not in self.roomsReadings:
+                self.roomsReadings[room] = {
+                    "temperatures": [],
+                    "lastMotionTime": None 
+                }
+                self.roomStatistics[room] = {"min": 0, "max": 0, "avg": 0}
+
             if msg.topic.endswith("temperature"):
                 self.newTemperatureReading(sensor_data)
-            else:
+            elif msg.topic.endswith("motion"):
                 self.motionSensorReading(sensor_data)
-            print("MQTT Received")
-
+ 
+            print(f"MQTT Received [{msg.topic}] presence={self.checkPresence(room)}")
+ 
         except Exception as e:
             print(f"MQTT Error: {e}")
 
+
     def motionSensorReading(self, data):
         room=data["bn"] #The room is the basename of the SenML
-        val=data["v"]
-        self.roomsReadings[room]["motionStatus"]= val
+        val = data["e"][0]["v"]
+
+        if val == 1 or val == True:
+            self.roomsReadings[room]["lastMotionTime"] = time.time()
+            print(f"Motion detected in {room}, presence timer reset")
         if len(self.roomsReadings[room]["temperatures"]) > 0:
             self.valuateCommands(room, self.roomsReadings[room]["temperatures"][-1])
+
+    def checkPresence(self, room):
+        lastMotion = self.roomsReadings[room]["lastMotionTime"]
+        if lastMotion is None:
+            return False
+        return (time.time() - lastMotion) <= TIMEOUT_PIR
+
     
     def newTemperatureReading(self, data): 
-        val=data["v"]
-        if val > alert_threshold: #Condition in case the maximum threshlod have been surpassed
+        val = data["e"][0]["v"]
+        if val > ALERT_THRESHOLD: #Condition in case the maximum threshlod have been surpassed
             payload={"description":"Exceeded the maximim accepted temperature"}
             self.mqtt_client.publish(self.alertTopic, json.dumps(payload))
 
@@ -109,34 +139,49 @@ class SmartHomeController(object):
         self.valuateCommands(room, val)
     
     def updateStatistics(self, room, newTemp):
-        if len(self.roomsReadings[room]["temperatures"]) < 10: #When the list has less tha 10 elements
-            self.roomsReadings[room]["temperatures"].append(newTemp)
+        temps = self.roomsReadings[room]["temperatures"]
+        if len(temps) < 10: #When the list has less tha 10 elements
+            temps.append(newTemp)
         else:
-            self.roomsReadings[room]["temperatures"].pop(0)
-            self.roomsReadings[room]["temperatures"].append(newTemp)
+            temps.pop(0)
+            temps.append(newTemp)
         
         #Computing the statistics with the new element of the list
-        self.roomStatistics[room]["max"]= max(self.roomsReadings[room]["temperatures"])
-        self.roomStatistics[room]["min"]= min(self.roomsReadings[room]["temperatures"])
-        self.roomStatistics[room]["avg"]= sum(self.roomsReadings[room]["temperatures"])/len(self.roomsReadings[room]["temperatures"])
+        self.roomStatistics[room]["max"]= max(temps)
+        self.roomStatistics[room]["min"]= min(temps)
+        self.roomStatistics[room]["avg"]= sum(temps)/len(temps)
+        print(f"Stats [{room}]: min={self.roomStatistics[room]['min']:.1f} "
+              f"max={self.roomStatistics[room]['max']:.1f} "
+              f"avg={self.roomStatistics[room]['avg']:.1f}")
+
     
     def valuateCommands(self, room, lastVal):
-        payload= {"bn":room, "n":"led", "v":False, "u":"boolean", "t":time.time()}
-        if self.roomsReadings[room]["motionStatus"]== True:
+        presence = self.checkPresence(room)
+        payload = {"bn": room, "e": [{"n": "led", "v": False, "u": "boolean", "t": time.time()}]}
+        if presence:
             if lastVal >= self.configurable_threshold:
-                self.mqtt_client.publish(self.ledTopic.format(room), json.dumps(payload))
+                #yes presence no led
+                self.mqtt_client.publish(self.ledTopic, json.dumps(payload))
+                print(f"[{room}] Presence=True, T={lastVal:.1f}>={self.configurable_threshold} → LED OFF")
             else:
-                payload["v"]= True #Switch On the LED
-                self.mqtt_client.publish(self.ledTopic.format(room), json.dumps(payload))
+                #yes presence yes led
+                payload["e"][0]["v"] = True
+                self.mqtt_client.publish(self.ledTopic, json.dumps(payload))
+                print(f"[{room}] Presence=True, T={lastVal:.1f}<{self.configurable_threshold} → LED ON")
         else:
-            self.mqtt_client.publish(self.ledTopic.format(room), json.dumps(payload))
+            #No presence No led
+            self.mqtt_client.publish(self.ledTopic, json.dumps(payload))
+            print(f"[{room}] Presence=False → LED OFF")
 
 
 if __name__ == '__main__':
-    conf = {'/': {'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
-                  'tools.response_headers.on': True,
-                  'tools.response_headers.headers': [('Content-Type', 'application/json')]}}
+    conf = {'/': {
+        'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
+        'tools.response_headers.on': True,
+        'tools.response_headers.headers': [('Content-Type', 'application/json')]
+    }}
     cherrypy.tree.mount(SmartHomeController(), '/', conf)
-    cherrypy.config.update({'server.socket_port': 9090})
+    cherrypy.config.update({'server.socket_port': 9091})
+    cherrypy.config.update({'server.socket_host': '0.0.0.0'})
     cherrypy.engine.start()
     cherrypy.engine.block()

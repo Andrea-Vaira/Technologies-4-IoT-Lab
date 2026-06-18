@@ -28,11 +28,16 @@ class Catalog(object):
         return self.cat
     
     def initializeCatalog(self):
-        for id,body in self.fm.data["devices"].items():
-            self.cat[id] = body.copy()
+        now = time.time()
+        for id, body in self.fm.data["devices"].items():
+            body_copy = body.copy()
+            body_copy["timestamp"] = now   #refresh timestamp 
+            self.cat[id] = body_copy
 
-        for id,body in self.fm.data["services"].items():
-            self.cat[id] = body.copy()
+        for id, body in self.fm.data["services"].items():
+            body_copy = body.copy()
+            body_copy["timestamp"] = now   #refresh timestamp
+            self.cat[id] = body_copy
         
     def _cleanup_loop(self):
         while True:
@@ -72,7 +77,7 @@ class Catalog(object):
         body= cherrypy.request.body.read().decode('utf-8')
         bodyDict= json.loads(body.strip())
         if(bodyDict["ID"] in self.cat.keys()):
-            self.modify(bodyDict["ID"])                      
+            self.update(bodyDict["ID"])                       
         else:
             print("Item not in the catalog")
         

@@ -10,9 +10,9 @@ class EventLogv2(object):
         self.events=list()
         self.roomNames=["livingroom", "kitchen", "bedroom"]
         self.sens=["temperature", "humidity", "motion"]
-        self.broker = "iot.eclipse.org" 
+        self.broker = "broker.hivemq.com"  
         self.port = 1883
-        self.mqtt_client = mqtt.Client(client_id="SmartHomeEventLog_Sub")
+        self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id="SmartHomeEventLog_Sub")
         self.mqtt_client.on_connect = self.on_connect
         self.mqtt_client.on_message = self.on_message
 
@@ -77,7 +77,7 @@ class EventLogv2(object):
         return "Event Logged".encode('utf-8')
 
     def DELETE(self, *path, **query):
-        if(len(path) == 0 and  "before" in query.keys()):
+        if "before" in query.keys():
             time_limit=float(query["before"])
             count=0
             newList=list()
@@ -89,7 +89,8 @@ class EventLogv2(object):
                     newList.append(e)
             self.events=newList
             return str(count).encode('utf-8')
-        return "0".encode('utf-8')
+        else:
+            raise cherrypy.HTTPError(400, "Missing required query parameter: before")
                
 if __name__ == '__main__':
     conf = {
